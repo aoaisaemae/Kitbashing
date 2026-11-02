@@ -41,6 +41,8 @@ Serve this project over HTTP; opening `index.html` directly does not support the
 | Redo | Ctrl/Cmd + Shift + Z; Ctrl + Y |
 | Copy / paste | Ctrl/Cmd + C / V |
 | Duplicate | Ctrl/Cmd + D |
+| Mirror selection | MI (choose axis and plane in Properties) |
+| Drag a copy | Hold Alt while dragging an object or a Move handle |
 | Remove selection | Delete / Backspace |
 | Frame selection / fit scene | F / A |
 | Deselect | Escape |
