@@ -11,3 +11,5 @@ header{gap:16px}#exportRhino{white-space:nowrap;color:#21e0ed;border-color:#2461
 .library-folders{margin:0 0 18px}.library-folders .row{margin:8px 0 10px}.library-folders select,.library-folders input,.asset-folder{width:100%;background:#151a20;color:#aebdcb;border:1px solid #303c46;border-radius:5px;padding:7px;font-size:10px}.asset-folder{width:calc(100% - 10px);margin:3px 5px 6px;font-size:9px}.folder-actions{display:flex;gap:7px;margin:8px 0}.folder-actions button{font-size:9px;flex:1;padding:7px 5px}.library-folders form{border:1px solid #28545a;padding:10px;border-radius:5px;margin-top:12px}.library-folders form label{display:block;font-size:10px;margin-bottom:8px}.library-folders .hint{font-size:10px}.card .asset-add{height:auto}
 
 .mirror-panel{margin-top:20px}.mirror-panel select{min-width:0;flex:1;background:#181b20;color:#c7d2dc;border:1px solid #30373e;border-radius:5px;padding:7px 3px;font-size:10px}.mirror-panel .blend{margin-top:0}
+
+.workspace-commands{margin:0 0 24px;padding-bottom:14px;border-bottom:1px solid #25272b}.workspace-commands .button-pair{margin-bottom:8px}.workspace-commands button{font-size:10px;padding:9px 4px}

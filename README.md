@@ -23,6 +23,7 @@ Serve this project over HTTP; opening `index.html` directly does not support the
 - Import OBJ files; disconnected components become independently editable parts.
 - Organize imports in folders; remove individual library items or clear the collection.
 - Move, rotate, scale, duplicate, copy and paste objects.
+- Add all imports in a grid, clear the placed scene without clearing the library, and recall the previous selection or last edited objects.
 - Shift-click and box-select multiple pieces; Ctrl/Cmd-click removes items from a selection.
 - Undo and redo scene and library changes.
 - Fuse overlapping closed solids with triangular surface preservation.
