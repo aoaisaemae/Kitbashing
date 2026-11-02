@@ -1,0 +1,13 @@
+{
+  "name": "form-kitbashing-studio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node serve.mjs",
+    "check": "node --check app.js && node --check geometry.js && node --check fusion-worker.js && node --check repair-core.js && node --check repair-worker.js && node --check serve.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
