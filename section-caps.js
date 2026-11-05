@@ -1,0 +1,11 @@
+import * as T from './three.js';
+// Winding-count stencil caps render solid cross-sections without changing meshes.
+export function sectionCaps(scene,renderer){
+ const items=new Map(),capGeometry=new T.PlaneGeometry(1,1);
+ function remove(m){const item=items.get(m);if(!item)return;for(const o of [item.back,item.front,item.cap]){scene.remove(o);o.material.dispose();}items.delete(m);}
+ return {update(meshes,plane,enabled,quaternion){
+ for(const [m,item]of items)if(!meshes.includes(m)||item.source!==m.geometry)remove(m);
+ meshes.forEach((m,i)=>{let item=items.get(m);if(!item&&enabled){const make=side=>{const material=new T.MeshBasicMaterial({side,depthTest:false,depthWrite:false,colorWrite:false,clippingPlanes:[plane],stencilWrite:true,stencilFunc:T.AlwaysStencilFunc,stencilRef:0});const op=side===T.BackSide?T.IncrementWrapStencilOp:T.DecrementWrapStencilOp;material.stencilFail=op;material.stencilZFail=op;material.stencilZPass=op;const pass=new T.Mesh(m.geometry,material);pass.matrixAutoUpdate=false;scene.add(pass);return pass;};const cap=new T.Mesh(capGeometry,new T.MeshBasicMaterial({color:0xff5284,side:T.DoubleSide,depthTest:true,depthWrite:true,stencilWrite:true,stencilRef:0,stencilFunc:T.NotEqualStencilFunc,stencilFail:T.ReplaceStencilOp,stencilZFail:T.ReplaceStencilOp,stencilZPass:T.ReplaceStencilOp,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));cap.userData.sectionCap=true;cap.onAfterRender=()=>renderer.clearStencil();scene.add(cap);item={source:m.geometry,back:make(T.BackSide),front:make(T.FrontSide),cap};items.set(m,item);}if(!item)return;
+ m.updateMatrixWorld(true);const box=(m.geometry.boundingBox||new T.Box3().setFromBufferAttribute(m.geometry.attributes.position)).clone().applyMatrix4(m.matrixWorld),visible=enabled&&box.intersectsPlane(plane);item.back.visible=item.front.visible=item.cap.visible=visible;if(!visible)return;item.back.matrix.copy(m.matrixWorld);item.front.matrix.copy(m.matrixWorld);item.back.renderOrder=20+i*3;item.front.renderOrder=21+i*3;item.cap.renderOrder=22+i*3;const center=box.getCenter(new T.Vector3());plane.projectPoint(center,item.cap.position);item.cap.quaternion.copy(quaternion);const size=Math.max(box.getSize(new T.Vector3()).length()*1.5,.001);item.cap.scale.set(size,size,1);
+ });},get size(){return items.size;}};
+}

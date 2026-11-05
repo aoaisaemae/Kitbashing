@@ -89,3 +89,13 @@ The command line sits below the viewport. Press `/` to focus it, Enter to execut
 - `ApplyClippingCut`: permanently trim selected closed solids (or the whole scene when nothing is selected), cap the cut, and disable the view section. Undo restores the originals. View clipping alone never changes export geometry.
 
 Quad wireframe, OBJ and Rhino exports use conforming subdivision: each original triangle becomes three planar four-sided faces, with shared edge midpoints. Shape and boundaries are retained, but this is not uniform or curvature-aware retopology. GPU rendering and solid-repair kernels still use triangles internally. Clipping-plane placement and enable state are saved with the browser workspace.
+
+## Feature library, section objects and rotation
+
+The library uses four fixed categories: Appendages, Whole Figures, Accessories and Heads. Names containing recognizable part or accessory words receive an initial category; ambiguous names default to Whole Figures. Correct any assignment using the category selector on its card. Existing browser libraries are migrated without removing imports. Category assignments support Undo/Redo and browser saving.
+
+Select the clipping plane by clicking an exposed part of it in the viewport or its Clipping plane entry in Scene objects. Standard Move/Rotate/Scale toolbar tools and W/E/R now control the selected plane; numeric property fields also apply to it. Scaling resizes its visual rectangle; clipping still extends infinitely. Click a model or press Escape to leave plane editing.
+
+Closed meshes receive pink stencil section caps at the cut, so they read as solid massing from the section side. The cap is a view effect; ApplyClippingCut is still required to bake a closed cut into exports. Open or inconsistent input meshes may not display reliable winding-count caps until repaired.
+
+Rotate selection offers world X/Y/Z axes, exact 45°, 90° and 180° buttons, reverse direction, and Free / 45° / 90° / 180° handle snapping. These controls apply to selected model parts or the clipping plane.
