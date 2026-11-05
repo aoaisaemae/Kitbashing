@@ -1,3 +1,4 @@
+import {installViewportControls} from './viewport-controls.js';
 import {installWorkflow} from './workflow-tabs.js';
 import {installSplit} from './split-tools.js';
 import {organizeProperties} from './properties.js';
@@ -12,7 +13,7 @@ import {TransformControls} from './TransformControls.js';
 import {OBJLoader} from './OBJLoader.js';
 import {splitParts} from './geometry.js';
 const $=s=>document.querySelector(s), view=$('#viewport'), colors=[0x21e0ed,0xdc24f4,0xff5284], assets=[], pieces=[];
-let workflowTools=null;let layerTools=null,splitTools=null;let layoutTools=null;let cadTools=null;const featureCategories=[{id:'appendages',name:'Appendages'},{id:'whole',name:'Whole Figures'},{id:'body',name:'Body'},{id:'accessories',name:'Accessories'},{id:'heads',name:'Heads'}];const folders=featureCategories.map(f=>({...f}));let currentFolder='*';let previousSelectionIds=[],lastEditedIds=[];
+let viewTools=null;let workflowTools=null;let layerTools=null,splitTools=null;let layoutTools=null;let cadTools=null;const featureCategories=[{id:'appendages',name:'Appendages'},{id:'whole',name:'Whole Figures'},{id:'body',name:'Body'},{id:'accessories',name:'Accessories'},{id:'heads',name:'Heads'}];const folders=featureCategories.map(f=>({...f}));let currentFolder='*';let previousSelectionIds=[],lastEditedIds=[];
 let selected=null,serial=0,wire=false,busy=false;
 const selection=new Set(),selectionPivot=new T.Object3D(),selectionOutlines=[];let pivotMatrix=new T.Matrix4();
 const renderer=new T.WebGLRenderer({antialias:true,alpha:true,stencil:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x0b0d10);view.append(renderer.domElement);
@@ -23,7 +24,7 @@ const transform=new TransformControls(camera,renderer.domElement);scene.add(tran
 scene.add(new T.HemisphereLight(0xd6f5ff,0x333045,2.6));const light=new T.DirectionalLight(0xffffff,3);light.position.set(60,100,80);scene.add(light);const rim=new T.DirectionalLight(0xdc24f4,2);rim.position.set(-80,20,-60);scene.add(rim);
 const grid=new T.GridHelper(600,60,0x33434b,0x1c252d);grid.position.y=-.15;scene.add(grid);
 const observer=new ResizeObserver(()=>{renderer.setSize(view.clientWidth,view.clientHeight);camera.aspect=view.clientWidth/view.clientHeight;camera.updateProjectionMatrix();});observer.observe(view);
-renderer.setAnimationLoop(()=>{orbit.update();layerTools?.update();splitTools?.update();workflowTools?.update();cadTools?.update();layoutTools?.update();selectionOutlines.forEach(h=>h.update());renderer.render(scene,camera);});
+renderer.setAnimationLoop(()=>{orbit.update();layerTools?.update();splitTools?.update();workflowTools?.update();cadTools?.update();viewTools?.update();layoutTools?.update();selectionOutlines.forEach(h=>h.update());renderer.render(scene,camera);});
 function say(s){$('#toast').textContent=s;$('#toast').style.display='block';clearTimeout(say.timer);say.timer=setTimeout(()=>$('#toast').style.display='none',5500);$('#status').textContent=s;}
 function material(i){return new T.MeshStandardMaterial({color:colors[i%3],metalness:.28,roughness:.36,wireframe:false});}
 function updateInputs(){for(const el of document.querySelectorAll('[data-prop]')){const p=el.dataset.prop,a=el.dataset.axis;el.disabled=!selected||![...selection].every(canEdit);el.value=selected?(p==='rotation'?T.MathUtils.radToDeg(selected[p][a]):selected[p][a]).toFixed(2):p==='scale'?'1.00':'0.00';}}
@@ -188,3 +189,5 @@ organizeProperties({$,split:()=>splitTools.start()});
 
 
 workflowTools=installWorkflow({$,pieces:()=>pieces,select:setSelection,selection:()=>[...selection],add:addPiece,checkpoint,mark:markEdited,canEdit,layerVisible:m=>!layerTools||layerTools.isVisible(m),cad:()=>cadTools,split:()=>splitTools,locked:m=>layerTools.state(m).locked,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();},say,refresh:refreshStats,fit});
+
+viewTools=installViewportControls({$,scene,camera,orbit,transform,selection:()=>[...selection],visible:isVisible,cad:()=>cadTools,say});

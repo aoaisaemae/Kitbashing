@@ -110,7 +110,7 @@ The interface uses the supplied reference's black background, cyan angular frame
 
 ## Split figures into closed quad parts
 
-Use the viewport **Split** button or enter `Split`, `Split 1` or `Split 2` in the command line. Select the figure first, or click it in the main viewport when prompted. Several selected solids can be processed as one figure.
+Use **Split** in Workspace properties or enter `Split`, `Split 1` or `Split 2` in the command line. Select the figure first, or click it in the main viewport when prompted. Several selected solids can be processed as one figure.
 
 - Level 1 separates Head and Body.
 - Level 2 additionally separates left/right arms, left/right legs, and accessories. Disconnected output volumes remain independently editable.
@@ -136,3 +136,9 @@ The top viewport tabs share the same perspective view, plan view, control dock, 
 Lower face counts simplify the form. Quad patches may be nonplanar, and this is a density tool rather than semantic or uniform retopology. All rendered triangles, quad wire edges, OBJ faces and Rhino faces refer to the same four-corner patches at reduced densities. Original-detail exports retain the established conforming subdivision. Clipping can be moved/rotated, enabled/disabled, or baked with Apply cut in Resolution. Quad OBJ and Rhino exports include the active stage; other stages are kept in the browser workspace. Undo/Redo and browser persistence retain stage content, original resolution buffers, quad layouts and the active tab.
 
 The bundled meshoptimizer v0.22 JavaScript simplifier is MIT-licensed; see meshoptimizer-LICENSE.txt. No external geometry service or runtime CDN is used.
+
+## Compact viewport controls
+
+Project-build and Resolution controls sit directly below the main viewport. The old horizontal modeling toolbar is removed; Move, Rotate, Scale and Mesh buttons are in Transform properties, with Split, Align, Mirror and clipping controls still available in their property groups and through existing commands/shortcuts. The Align face strip appears only during guided alignment. The command field starts blank, with no placeholder or initial help sentence.
+
+**Zoom** frames the selected visible object or group, including very small models, and adjusts the camera clipping range. **Single Color** renders model surfaces and their wire edges in cyan in both views. This display preference survives reopening; original model colors remain unchanged in workspace storage and Rhino exports. Section highlights and modeling guides retain their functional colors.
