@@ -7,7 +7,7 @@ import path from 'node:path';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error('PORT must be between 1 and 65535.');
-const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.wasm': 'application/wasm', '.txt': 'text/plain; charset=utf-8' };
+const types = { '.svg': 'image/svg+xml', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.wasm': 'application/wasm', '.txt': 'text/plain; charset=utf-8' };
 const files = new Set((await readdir(root)).filter(name => types[path.extname(name)]));
 
 http.createServer(async (req, res) => {
@@ -28,4 +28,4 @@ http.createServer(async (req, res) => {
     if (!res.headersSent) res.writeHead(400);
     res.end('Unable to serve request');
   }
-}).listen(port, '127.0.0.1', () => console.log(`MARKIT studio: http://127.0.0.1:${port}`));
+}).listen(port, '127.0.0.1', () => console.log(`POPMARKIT studio: http://127.0.0.1:${port}`));
