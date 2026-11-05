@@ -162,3 +162,7 @@ The density range now begins at six quad faces. Low-count reduction may discard 
 Clipping Plane contains only section controls: create, enable/disable, move, rotate, scale, flip and apply cut. The normal Properties panel remains available in other viewports.
 
 Lattice creates a tensor grid around the selected Resolution mesh, with 1–6 cells per axis. Click a cage point and drag its viewport axis handles. Mesh vertices follow trilinearly interpolated point displacements. The deformer preserves quad connectivity. Off restores the undeformed cage mesh; On reapplies the point offsets. Reset clears point offsets. Changing cell divisions starts a new rest cage around the current shape. Cage state and geometry persist in the existing browser workspace, and edits support Undo/Redo. Large deformations can fold or self-intersect; inspect before printing. This cage is independent of the removed object bounding-box display.
+
+## Command tool-state fix
+
+Idle clipping-plane cleanup no longer resets the main transform mode when a clipping plane is hidden or locked. Bare Move, Rotate and Scale activate the relevant handles directly, independent of hidden property buttons, and report usage feedback. Numeric variants still apply immediately. Transform commands release any selected lattice-point gizmo before targeting the selected model. Hovering a lattice point does not block command entry; actual drag operations and active guided picks still protect their state. Delete, Undo and Redo report command feedback.
