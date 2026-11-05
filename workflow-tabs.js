@@ -1,6 +1,6 @@
 import * as T from './three.js';
 export function installWorkflow(e){
- const {$}=e,names=['figures','project','resolution'];let active='figures',worker=null,rejectJob=null,job=0,lastUI='',message='Arrange your source figures, then build a closed Project mesh.';
+ const {$}=e,names=['figures','resolution','project'];let active='figures',worker=null,rejectJob=null,job=0,lastUI='',message='Arrange your source figures, then build a closed Project mesh.';
  const tabs=document.createElement('nav');tabs.className='viewport-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Modeling stages');for(const name of names){const b=document.createElement('button');b.id='viewport'+name[0].toUpperCase()+name.slice(1);b.textContent=name[0].toUpperCase()+name.slice(1);b.dataset.stage=name;b.setAttribute('role','tab');b.onclick=()=>switchTo(name);tabs.append(b);}$('.canvas-head').before(tabs);
  const bar=document.createElement('section');bar.className='workflow-bar';bar.innerHTML='<div class="workflow-actions"><button id="buildProject">Build Project from Figures</button><button id="sendResolution">Edit resolution →</button><label id="resolutionLabel" for="resolutionFaces">Quad faces</label><input id="resolutionFaces" type="range" min="100" max="100" step="2" value="100"><input id="resolutionCount" aria-label="Target quad faces" type="number" min="100" step="2" value="100"><button id="applyResolution">Apply density</button><button id="restoreResolution">Original</button><button id="refreshResolution">Update from Project</button><button id="cancelWorkflow" hidden>Cancel</button></div><p id="workflowStatus" role="status"></p>';
  $('.alignment-strip').after(bar);
@@ -22,9 +22,9 @@ export function installWorkflow(e){
   for(const id of ['resolutionLabel','resolutionFaces','resolutionCount','applyResolution','restoreResolution','refreshResolution'])$('#'+id).hidden=active!=='resolution';
   for(const b of bar.querySelectorAll('button:not(#cancelWorkflow)'))b.disabled=e.isBusy();$('#cancelWorkflow').hidden=!worker;
   if(active==='resolution'){
-   const visible=current.filter(e.layerVisible),max=visible.reduce((n,m)=>n+base(m).count,0),min=Math.min(100,max),actual=visible.reduce((n,m)=>n+count(m),0);for(const id of ['resolutionFaces','resolutionCount']){const input=$('#'+id);input.min=min;input.max=max;input.value=Math.max(min,Math.min(max,actual));input.disabled=e.isBusy()||max<=min;}
+   const visible=current.filter(e.layerVisible),max=visible.reduce((n,m)=>n+base(m).count,0),min=Math.min(6,max),actual=visible.reduce((n,m)=>n+count(m),0);for(const id of ['resolutionFaces','resolutionCount']){const input=$('#'+id);input.min=min;input.max=max;input.value=Math.max(min,Math.min(max,actual));input.disabled=e.isBusy()||max<=min;}
    $('#applyResolution').disabled=e.isBusy()||!max||max<=min;$('#restoreResolution').disabled=e.isBusy()||!max;
-   if(!e.isBusy())say(max?(max<100?'Original mesh has '+max+' quads, already below 100.':actual.toLocaleString()+' quads · range '+min.toLocaleString()+'–'+max.toLocaleString()+'. Lower density changes detail; Original restores full geometry.'):'Build a Project first to study its resolution.');
+   if(!e.isBusy())say(max?(max<6?'Original mesh has '+max+' quads, already below 6.':actual.toLocaleString()+' quads · range '+min.toLocaleString()+'–'+max.toLocaleString()+'. Lower density changes detail; Original restores full geometry.'):'Build a Project first to study its resolution.');
   }else $('#workflowStatus').textContent=message;
  }
  async function switchTo(name){
@@ -51,11 +51,11 @@ export function installWorkflow(e){
  }
  async function applyResolution(original=false){
   if(active!=='resolution'||e.isBusy())return;const targets=stagePieces().filter(e.layerVisible);if(!targets.length)return e.say('Copy a Project into Resolution first.');if(targets.some(m=>!e.canEdit(m)))return e.say('Unlock the Resolution objects and their layers before changing density.');
-  const max=targets.reduce((n,m)=>n+base(m).count,0),target=original?max:Math.max(Math.min(100,max),Math.min(max,Math.round(Number($('#resolutionCount').value)/2)*2));
+  const max=targets.reduce((n,m)=>n+base(m).count,0),target=original?max:Math.max(Math.min(6,max),Math.min(max,Math.round(Number($('#resolutionCount').value)/2)*2));
   try{
    let results;if(target>=max)results=targets.map(m=>({positions:base(m).positions.slice(),layout:base(m).layout,count:base(m).count}));
-   else{say('Reducing the mesh and validating closed quad surfaces…');const items=targets.map(m=>({positions:base(m).positions.slice(),target:Math.max(24,Math.round(target*base(m).count/max/2)*2)})),result=await run('./resolution-worker.js',{items},items.map(i=>i.positions.buffer));results=result.results.map(r=>({...r,layout:true}));}
-   e.checkpoint();targets.forEach((m,i)=>{m.geometry.dispose();m.geometry=geometry(results[i].positions,results[i].layout);m.userData.resolutionTarget=target;});lastUI='';update();e.select(targets);e.mark(targets);e.refresh();
+   else{say('Reducing the mesh and validating closed quad surfaces…');const items=targets.map(m=>({positions:base(m).positions.slice(),target:Math.max(6,Math.round(target*base(m).count/max/2)*2)})),result=await run('./resolution-worker.js',{items},items.map(i=>i.positions.buffer));results=result.results.map(r=>({...r,layout:true}));}
+   e.checkpoint();targets.forEach((m,i)=>{delete m.userData.lattice;m.geometry.dispose();m.geometry=geometry(results[i].positions,results[i].layout);m.userData.resolutionTarget=target;});lastUI='';update();e.select(targets);e.mark(targets);e.refresh();
    const actual=targets.reduce((n,m)=>n+count(m),0);say(actual.toLocaleString()+' closed quads · '+(actual===target?'target reached.':actual>target?'closed topology requires more faces than the requested target.':'nearest valid closed density.')+(target<max?' Lower densities simplify the shape; use Original to restore all detail.':' Original geometry restored.'));
   }catch(error){say(error.message);e.say(error.message);}
  }
