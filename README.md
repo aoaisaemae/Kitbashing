@@ -74,3 +74,18 @@ Reconstruction may change dimensions, round detail, thicken surfaces or fill int
 All website files are in the repository root and can be served by any static host with JavaScript module and WebAssembly support. Repository publication does not enable GitHub Pages or replace the existing hosted studio.
 
 Third-party libraries retain their included license notices.
+
+## CAD commands and quad surfaces
+
+The command line sits below the viewport. Press `/` to focus it, Enter to execute, Up/Down to revisit commands, and Escape to cancel a guided operation. Type `Help` for examples.
+
+- `Move` activates handles; `Move 10 0 0` moves selected objects by a millimeter offset.
+- `Rotate` activates handles; `Rotate y 90` rotates around the selection center.
+- `Scale` activates handles; `Scale 1.5` scales uniformly around the selection center.
+- `Copy` or `Copy 10 0 0`, `Delete`, `Undo`, `Redo`, `Mirror`, `SelectAll`, `SelectPrevious`, `LastEdited`, `Fit`.
+- `Align`: click the base object, the target object, then one of six tangent faces of the target's oriented volume bounds. The base's local +Y direction follows the chosen normal, and its lowest projected point contacts the plane. The target remains fixed. This aligns to a volume tangent plane; it does not wrap or deform geometry onto a curved surface.
+- `ClippingPlane`: create a visible section plane. Use `MoveClippingPlane` and `RotateClippingPlane`, or Move/Rotate numerical commands while editing it.
+- `EnableClippingPlane`, `DisableClippingPlane`, `FlipClippingPlane` control the view section.
+- `ApplyClippingCut`: permanently trim selected closed solids (or the whole scene when nothing is selected), cap the cut, and disable the view section. Undo restores the originals. View clipping alone never changes export geometry.
+
+Quad wireframe, OBJ and Rhino exports use conforming subdivision: each original triangle becomes three planar four-sided faces, with shared edge midpoints. Shape and boundaries are retained, but this is not uniform or curvature-aware retopology. GPU rendering and solid-repair kernels still use triangles internally. Clipping-plane placement and enable state are saved with the browser workspace.
