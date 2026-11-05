@@ -83,7 +83,7 @@ The command line sits below the viewport. Press `/` to focus it, Enter to execut
 - `Rotate` activates handles; `Rotate y 90` rotates around the selection center.
 - `Scale` activates handles; `Scale 1.5` scales uniformly around the selection center.
 - `Copy` or `Copy 10 0 0`, `Delete`, `Undo`, `Redo`, `Mirror`, `SelectAll`, `SelectPrevious`, `LastEdited`, `Fit`.
-- `Align`: click the base object, the target object, then one of six tangent faces of the target's oriented volume bounds. The base's local +Y direction follows the chosen normal, and its lowest projected point contacts the plane. The target remains fixed. This aligns to a volume tangent plane; it does not wrap or deform geometry onto a curved surface.
+- `Align`: select the base object, its tangent face, a target object, then a target tangent face. Mesh-derived candidates include axial, oblique and area-weighted surface directions. The chosen contact faces touch; the target stays fixed. This operation does not deform geometry to wrap around a curved surface.
 - `ClippingPlane`: create a visible section plane. Use `MoveClippingPlane` and `RotateClippingPlane`, or Move/Rotate numerical commands while editing it.
 - `EnableClippingPlane`, `DisableClippingPlane`, `FlipClippingPlane` control the view section.
 - `ApplyClippingCut`: permanently trim selected closed solids (or the whole scene when nothing is selected), cap the cut, and disable the view section. Undo restores the originals. View clipping alone never changes export geometry.
@@ -92,7 +92,7 @@ Quad wireframe, OBJ and Rhino exports use conforming subdivision: each original 
 
 ## Feature library, section objects and rotation
 
-The library uses four fixed categories: Appendages, Whole Figures, Accessories and Heads. Names containing recognizable part or accessory words receive an initial category; ambiguous names default to Whole Figures. Correct any assignment using the category selector on its card. Existing browser libraries are migrated without removing imports. Category assignments support Undo/Redo and browser saving.
+The library uses five fixed categories: Appendages, Whole Figures, Body, Accessories and Heads. Torso/chest filenames and close matches to categorized Body references are sorted into Body. Names containing recognizable part or accessory words receive an initial category; ambiguous names default to Whole Figures. Correct any assignment using the category selector on its card. Existing browser libraries are migrated without removing imports. Category assignments support Undo/Redo and browser saving.
 
 Select the clipping plane by clicking an exposed part of it in the viewport or its Clipping plane entry in Scene objects. Standard Move/Rotate/Scale toolbar tools and W/E/R now control the selected plane; numeric property fields also apply to it. Scaling resizes its visual rectangle; clipping still extends infinitely. Click a model or press Escape to leave plane editing.
 
@@ -106,4 +106,21 @@ Align now follows four steps: select the base object, select its tangent face, s
 
 Tangent candidates combine area-weighted mesh normal clusters with axial and oblique support directions (typically 26–48 choices). Plane anchors are actual mesh vertices or points inside supporting triangles. The chosen base normal rotates opposite the chosen target normal, and the two contact anchors coincide; all source vertices participate in support calculations. This avoids the old gap from aligning to a bounding-box center. Tangent faces describe the overall volume, including edge/corner contact directions; Align does not deform a mesh to match another surface.
 
-The interface uses the supplied reference's black background, cyan angular frames, large left perspective panel and right dock. The right dock includes a live orthographic XZ top view with pan, zoom, fit and object selection. Figures and Properties tabs expose the full existing toolset. The command line stays below the main viewport. Face choices and the current Align prompt appear directly above the main viewport.
+The interface uses the supplied reference's black background, cyan angular frames, large left perspective panel and right dock. The right dock includes a live orthographic XZ top view with pan, zoom, fit and object selection. Figures, Properties and Layers tabs expose the toolset. The command line stays below the main viewport. Face choices and the current Align prompt appear directly above the main viewport.
+
+## Split figures into closed quad parts
+
+Use the viewport **Split** button or enter `Split`, `Split 1` or `Split 2` in the command line. Select the figure first, or click it in the main viewport when prompted. Several selected solids can be processed as one figure.
+
+- Level 1 separates Head and Body.
+- Level 2 additionally separates left/right arms, left/right legs, and accessories. Disconnected output volumes remain independently editable.
+- The initial proposal uses height profiles plus categorized head, body and limb proportions. Disconnected accessories can be matched to categorized library examples; an adjustable accessory box handles attached hats, bows or jewelry. This is a geometric estimate, not a semantic recognition guarantee. Review unusual, crouched or overlapping figures carefully.
+- Choose Local X/Y/Z as the figure up direction. Select a guide, drag its viewport handle or change its percentage, then choose Preview closed parts. An accessory region supports moving, rotating and scaling. Quad wire view also works on the preview.
+- Preview does not replace source objects. Applying checks source stability, closed edge topology and partition volume, then puts the results into category sublayers. A single Undo restores the originals. Escape or Cancel stops a running preview.
+- Automatic repair can close source openings. Difficult invalid sources may need surface reconstruction, which can alter small details or dimensions; this is reported before Apply. Disable automatic repair to require surface-preserving closure. The established conforming quad export produces four-sided faces on each closed result; rendering and boolean kernels use triangles internally. Closed topology alone does not guarantee printable wall thickness or support-free geometry; use the existing print checks and slicer preview.
+
+## Layers and property groups
+
+The Layers tab lists every workspace object and the clipping-plane helper. Add top-level layers or sublayers, rename/reparent them, and assign objects through each row's layer menu. Lock/unlock uses 🔒 / 🔓; show/hide uses 👁️ / 🙈. Parent locks and visibility apply to descendants. Protected objects are excluded from picking, transforms, fusion, repair, splitting and Clear workspace. Layer changes support Undo/Redo and browser persistence. Rhino exports include the native layer hierarchy; hidden objects stay in the Rhino file, while OBJ export includes shown geometry.
+
+Properties is organized into collapsible Workspace, Transform, Fusion and Clipping Plane groups. Workspace contains add-all, clear, grid arrangement and selection recall. Transform contains position, rotation, exact rotation choices, scale and mirror. Fusion contains density, Fuse, and nested print/repair controls. Clipping Plane contains enable, disable, move, rotate and Apply cut. Existing browser workspace records migrate additively under the same storage key.
