@@ -28,4 +28,4 @@ http.createServer(async (req, res) => {
     if (!res.headersSent) res.writeHead(400);
     res.end('Unable to serve request');
   }
-}).listen(port, '127.0.0.1', () => console.log(`FORM studio: http://127.0.0.1:${port}`));
+}).listen(port, '127.0.0.1', () => console.log(`Markit studio: http://127.0.0.1:${port}`));

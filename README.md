@@ -1,4 +1,4 @@
-# FORM — Kitbashing Studio
+# Markit — Kitbashing Studio
 
 A browser-based 3D workspace for importing OBJ parts, arranging compositions, repairing meshes, and exporting OBJ or native Rhino `.3dm` files.
 
