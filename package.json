@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node serve.mjs",
-    "check": "node --check app.js && node --check geometry.js && node --check fusion-worker.js && node --check repair-core.js && node --check repair-worker.js && node --check serve.mjs && node --check quad-mesh.js && node --check cad-tools.js && node --check clip-worker.js && node --check tangent-faces.js && node --check reference-layout.js && node --check section-caps.js && node --check layers.js && node --check properties.js && node --check shape-features.js && node --check split-tools.js && node --check split-worker.js && node --check workflow-tabs.js && node --check resolution-worker.js && node --check meshopt_simplifier.js && node --check viewport-controls.js"
+    "check": "node --check app.js && node --check geometry.js && node --check fusion-worker.js && node --check repair-core.js && node --check repair-worker.js && node --check serve.mjs && node --check quad-mesh.js && node --check cad-tools.js && node --check clip-worker.js && node --check tangent-faces.js && node --check reference-layout.js && node --check section-caps.js && node --check layers.js && node --check properties.js && node --check shape-features.js && node --check split-tools.js && node --check split-worker.js && node --check workflow-tabs.js && node --check resolution-worker.js && node --check meshopt_simplifier.js && node --check viewport-controls.js && node --check project-mass.js && node --check surface-flow-worker.js"
   },
   "engines": {
     "node": ">=18"
