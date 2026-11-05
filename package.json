@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node serve.mjs",
-    "check": "node --check app.js && node --check geometry.js && node --check fusion-worker.js && node --check repair-core.js && node --check repair-worker.js && node --check serve.mjs && node --check quad-mesh.js && node --check cad-tools.js && node --check clip-worker.js"
+    "check": "node --check app.js && node --check geometry.js && node --check fusion-worker.js && node --check repair-core.js && node --check repair-worker.js && node --check serve.mjs && node --check quad-mesh.js && node --check cad-tools.js && node --check clip-worker.js && node --check tangent-faces.js && node --check reference-layout.js && node --check section-caps.js"
   },
   "engines": {
     "node": ">=18"

@@ -1,3 +1,4 @@
+import {installReferenceLayout} from './reference-layout.js';
 import {installCad} from './cad-tools.js';
 import {quadMesh} from './quad-mesh.js';
 import * as T from 'three';
@@ -6,7 +7,7 @@ import {TransformControls} from './TransformControls.js';
 import {OBJLoader} from './OBJLoader.js';
 import {splitParts} from './geometry.js';
 const $=s=>document.querySelector(s), view=$('#viewport'), colors=[0x21e0ed,0xdc24f4,0xff5284], assets=[], pieces=[];
-let cadTools=null;const featureCategories=[{id:'appendages',name:'Appendages'},{id:'whole',name:'Whole Figures'},{id:'accessories',name:'Accessories'},{id:'heads',name:'Heads'}];const folders=featureCategories.map(f=>({...f}));let currentFolder='*';let previousSelectionIds=[],lastEditedIds=[];
+let layoutTools=null;let cadTools=null;const featureCategories=[{id:'appendages',name:'Appendages'},{id:'whole',name:'Whole Figures'},{id:'accessories',name:'Accessories'},{id:'heads',name:'Heads'}];const folders=featureCategories.map(f=>({...f}));let currentFolder='*';let previousSelectionIds=[],lastEditedIds=[];
 let selected=null,serial=0,wire=false,busy=false;
 const selection=new Set(),selectionPivot=new T.Object3D(),selectionOutlines=[];let pivotMatrix=new T.Matrix4();
 const renderer=new T.WebGLRenderer({antialias:true,alpha:true,stencil:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x0b0d10);view.append(renderer.domElement);
@@ -17,7 +18,7 @@ const transform=new TransformControls(camera,renderer.domElement);scene.add(tran
 scene.add(new T.HemisphereLight(0xd6f5ff,0x333045,2.6));const light=new T.DirectionalLight(0xffffff,3);light.position.set(60,100,80);scene.add(light);const rim=new T.DirectionalLight(0xdc24f4,2);rim.position.set(-80,20,-60);scene.add(rim);
 const grid=new T.GridHelper(600,60,0x33434b,0x1c252d);grid.position.y=-.15;scene.add(grid);
 const observer=new ResizeObserver(()=>{renderer.setSize(view.clientWidth,view.clientHeight);camera.aspect=view.clientWidth/view.clientHeight;camera.updateProjectionMatrix();});observer.observe(view);
-renderer.setAnimationLoop(()=>{orbit.update();cadTools?.update();selectionOutlines.forEach(h=>h.update());renderer.render(scene,camera);});
+renderer.setAnimationLoop(()=>{orbit.update();cadTools?.update();layoutTools?.update();selectionOutlines.forEach(h=>h.update());renderer.render(scene,camera);});
 function say(s){$('#toast').textContent=s;$('#toast').style.display='block';clearTimeout(say.timer);say.timer=setTimeout(()=>$('#toast').style.display='none',5500);$('#status').textContent=s;}
 function material(i){return new T.MeshStandardMaterial({color:colors[i%3],metalness:.28,roughness:.36,wireframe:false});}
 function updateInputs(){for(const el of document.querySelectorAll('[data-prop]')){const p=el.dataset.prop,a=el.dataset.axis;el.disabled=!selected;el.value=selected?(p==='rotation'?T.MathUtils.radToDeg(selected[p][a]):selected[p][a]).toFixed(2):p==='scale'?'1.00':'0.00';}}
@@ -169,3 +170,5 @@ for(const id of ['duplicate','reset','mirror','pasteObjects','repair','fuse','ar
 
 cadTools=installCad({T,$,scene,camera,renderer,view,orbit,transform,pieces:()=>pieces,selection:()=>[...selection],select:setSelection,checkpoint,mark:markEdited,add:addPiece,clone:cloneAtCurrentTransform,say,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();}});
 $('#wire').onclick=()=>{wire=!wire;cadTools.wire(wire);$('#wire').classList.toggle('active',wire);};$('#wire').title='Show quadrangular mesh edges';
+
+layoutTools=installReferenceLayout({$,scene,camera,renderer,orbit,transform,grid,pieces:()=>pieces,cad:()=>cadTools,select:meshes=>{rememberSelection();setSelection(meshes);}});

@@ -99,3 +99,11 @@ Select the clipping plane by clicking an exposed part of it in the viewport or i
 Closed meshes receive pink stencil section caps at the cut, so they read as solid massing from the section side. The cap is a view effect; ApplyClippingCut is still required to bake a closed cut into exports. Open or inconsistent input meshes may not display reliable winding-count caps until repaired.
 
 Rotate selection offers world X/Y/Z axes, exact 45°, 90° and 180° buttons, reverse direction, and Free / 45° / 90° / 180° handle snapping. These controls apply to selected model parts or the clipping plane.
+
+## Mesh-derived contact alignment and reference layout
+
+Align now follows four steps: select the base object, select its tangent face, select a different target object, then select the target tangent face. The previous three-step workflow is superseded.
+
+Tangent candidates combine area-weighted mesh normal clusters with axial and oblique support directions (typically 26–48 choices). Plane anchors are actual mesh vertices or points inside supporting triangles. The chosen base normal rotates opposite the chosen target normal, and the two contact anchors coincide; all source vertices participate in support calculations. This avoids the old gap from aligning to a bounding-box center. Tangent faces describe the overall volume, including edge/corner contact directions; Align does not deform a mesh to match another surface.
+
+The interface uses the supplied reference's black background, cyan angular frames, large left perspective panel and right dock. The right dock includes a live orthographic XZ top view with pan, zoom, fit and object selection. Figures and Properties tabs expose the full existing toolset. The command line stays below the main viewport. Face choices and the current Align prompt appear directly above the main viewport.
