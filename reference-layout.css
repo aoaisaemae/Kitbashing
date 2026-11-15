@@ -4,3 +4,9 @@ body{background:#000;color:#c3d9df;font-family:'DM Sans',Arial,sans-serif;paddin
 @media(max-width:760px){body{overflow:auto;padding:8px}header{height:auto;min-height:40px}.project{display:none}main{height:auto;display:flex;flex-direction:column;gap:16px}.workspace{height:72dvh;min-height:470px}.reference-dock{display:grid;grid-template-columns:1fr;gap:16px}.plan-panel{height:230px}.reference-controls{height:650px}.view-label small{display:none}.canvas-head #autoRotate{display:none}.control-content .section{padding:16px}.command-line input{font-size:11px}}
 
 .brand{display:inline-flex;align-items:center;white-space:nowrap}.brand-o{display:inline-flex;letter-spacing:0;margin:0 .01em}.brand-o svg{display:block;width:1.13em;height:1.13em;overflow:visible}
+.projection-tabs{display:flex;gap:8px}.panel-heading .projection-tabs button{padding:5px 7px;border-bottom:1px solid transparent}.panel-heading .projection-tabs button[aria-selected=true]{color:#21e0ed;border-color:#21e0ed}
+#refreshResolution{display:none!important}#flatView[aria-pressed=true]{color:#21e0ed;background:#06252b}
+.library-folders input{min-width:0;flex:1;background:#031014;color:#c6eef4;border:1px solid #0c4651;padding:7px;font-size:10px}.library-folders #collectionFilter{width:100%;margin:6px 0}
+
+.panel-tabs button[hidden],.projection-tabs button[hidden]{display:none!important}
+.resolution-panel [hidden]{display:none!important}.resolution-panel #saveIteration.active,.resolution-panel button.active{background:#123640;color:#21e0ed}
