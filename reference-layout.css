@@ -30,3 +30,5 @@ body{background:#000;color:#c3d9df;font-family:"Helvetica Neue", Helvetica, Aria
   outline: 1px solid #21e0ed;
   outline-offset: 1px;
 }
+
+.folder-library{margin:14px 0;padding:10px;border:1px solid #14505a}.folder-library h3{font-size:11px;margin:0 0 8px}.folder-library label{display:grid;gap:4px}.folder-library select{min-width:0;width:100%;padding:5px;background:#041014;border:1px solid #14505a;color:#c3d9df;font:inherit}.folder-library>button{width:100%;margin-top:6px}.folder-library .hint:empty{display:none}
