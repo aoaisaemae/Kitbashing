@@ -1,5 +1,6 @@
+import {installSharedLibrary} from './shared-library.js';
 import {installFolderLibrary} from './folder-library.js';
-import {installResolutionTools} from './resolution-tools.js';
+import {installResolutionTools} from './resolution-tools.js?v=floor-export';
 import {installProjectMass} from './project-mass.js';
 import {installViewportControls} from './viewport-controls.js';
 import {installWorkflow} from './workflow-tabs.js';
@@ -88,6 +89,7 @@ function renderAssets(){collectionOptions($('#collectionFilter'),activeCollectio
 function addAsset(g,name,folderId=currentFolder==='*'?null:currentFolder||null){if(g.index)g=g.toNonIndexed();g.computeVertexNormals();g.computeBoundingBox();const asset={geometry:g,name,folderId:featureCategory(folderId,name),collection:folderFromFilename(name)};assets.push(asset);$('#cards .library-empty')?.remove();renderAsset(asset);updateLibraryCount();syncFolderControls();return asset;}
 async function importFiles(files){if(busy||splitTools?.active)return;const importStart=pieces.length;files=Array.from(files);for(const file of files){if(!/\.obj$/i.test(file.name)){say('Choose an OBJ file.');continue;}if(file.size>250*1024*1024){say('Please use OBJ files up to 250 MiB each.');continue;}try{const obj=new OBJLoader().parse(await file.text()),positions=[],parts=[];obj.updateMatrixWorld(true);obj.traverse(m=>{if(m.isMesh){const g=(m.geometry.index?m.geometry.toNonIndexed():m.geometry.clone()).applyMatrix4(m.matrixWorld);const vertices=g.attributes.position.array;for(const v of vertices)positions.push(v);for(const part of splitParts(vertices,true))parts.push(part);g.dispose();}});if(!positions.length)throw Error('No mesh faces found');const whole=new T.BufferGeometry();whole.setAttribute('position',new T.Float32BufferAttribute(positions,3));whole.computeBoundingBox();const center=whole.boundingBox.getCenter(new T.Vector3()),floor=whole.boundingBox.min.y;for(const [i,part] of parts.entries()){const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(part,3));g.translate(-center.x,-floor,-center.z);g.computeBoundingBox();const offset=g.boundingBox.getCenter(new T.Vector3());g.translate(-offset.x,-offset.y,-offset.z);const name=file.name.replace(/\.obj$/i,'')+(parts.length>1?' · part '+(i+1):'');const a=addAsset(g,name);a.offset=offset;addPiece(a);}whole.dispose();say(file.name+' imported · '+parts.length+' editable part(s)');}catch(e){say('Could not import '+file.name+': '+e.message);}}renderAssets();markEdited(pieces.slice(importStart));fit();}
 installFolderLibrary($('#drop'),{importFiles,isBusy:()=>busy||!!splitTools?.active});
+installSharedLibrary($('#drop'),{addPiece:addBundledPiece,canImport:()=>!busy&&!splitTools?.active&&workflowTools?.active==='figures'});
 $('#files').onchange=e=>{importFiles(e.target.files);e.target.value='';};for(const type of ['dragover','drop'])$('#drop').addEventListener(type,e=>{e.preventDefault();if(type==='drop')importFiles(e.dataTransfer.files);});
 function fit(){
  const bounds=new T.Box3();
@@ -405,3 +407,10 @@ massTools=installProjectMass({$,scene,camera,renderer,pieces:()=>pieces,assets:(
 resolutionTools=installResolutionTools({$,scene,get camera(){return displayCamera();},renderer,orbit,transform,pieces:()=>pieces,selection:()=>[...selection],select:setSelection,add:addPiece,checkpoint,mark:markEdited,canEdit,locked:m=>layerTools.state(m).locked,layout:()=>layoutTools,workflow:()=>workflowTools,cad:()=>cadTools,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();},say,fit});
 
 
+
+function addBundledPiece(model,positions){
+ if(busy||splitTools?.active||workflowTools?.active!=='figures')return false;
+ const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.BufferAttribute(positions,3));
+ geometry.userData.quadLayout=model.quadLayout;geometry.computeVertexNormals();geometry.computeBoundingBox();
+ checkpoint();const mesh=addPiece({geometry,name:model.name,category:model.category,offset:model.offset?new T.Vector3().fromArray(model.offset):undefined});geometry.dispose();markEdited([mesh]);fit();return true;
+}

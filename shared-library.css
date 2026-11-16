@@ -1,0 +1,15 @@
+#sharedLibrary{margin:14px 0 18px;padding:10px;border:1px solid #14505a;background:#030c10}
+#sharedLibrary .shared-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+#sharedLibrary h3{font-size:12px;margin:0;color:#c3d9df}
+#sharedLibrary output{font-size:10px;color:#21e0ed}
+#sharedLibrary .shared-filter{display:grid;gap:5px;font-size:11px;margin-bottom:10px}
+#sharedLibrary select{width:100%;border:1px solid #14505a;background:#041014;color:#c3d9df;padding:7px;font:inherit}
+#sharedLibrary .shared-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:328px;overflow:auto}
+#sharedLibrary article{display:flex;flex-direction:column;min-width:0;border:1px solid #14505a;background:#071116;padding:5px;gap:5px}
+#sharedLibrary article img{width:100%;aspect-ratio:4/3;object-fit:cover;background:#071116}
+#sharedLibrary article strong{font-size:11px;overflow-wrap:anywhere}
+#sharedLibrary article small{font-size:9px;color:#8ba9b2;margin-top:auto}
+#sharedLibrary article button{font-size:10px;color:#21e0ed;min-height:27px;background:#09242c;border:1px solid #14505a}
+#sharedLibrary .hint:empty{display:none}
+
+#sharedLibrary .library-thumbnail{width:100%;aspect-ratio:4/3;background-image:url(library-thumbnails.webp);background-size:1300% 1800%;background-repeat:no-repeat}
