@@ -89,11 +89,27 @@ function installIterations(e,parent){
   list.replaceChildren();
   if(!items.length){list.textContent='No saved iterations yet.';return;}
   const picker=document.createElement('select');picker.setAttribute('aria-label','Saved iterations');list.append(picker);
-  const rows=new Map();
+  const rows=new Map(),floorOptions=[];
   for(const item of items.sort((a,b)=>a.name.localeCompare(b.name))){
    const button=document.createElement('button');
    button.textContent='Insert';
    picker.add(new Option(item.name,item.id));
+   const floor=document.createElement('select');floor.setAttribute('aria-label','Assign floor for '+item.name);
+   for(let n=1;n<=50;n++)floor.add(new Option('Floor '+n,String(n)));
+   const existing=e.pieces().find(m=>m.userData.workspaceStage==='floor-plates'&&(m.userData.iterationId===item.id||(!m.userData.iterationId&&m.name===item.name)));
+   const nextFloor=()=>Math.min(50,1+Math.max(0,...e.pieces().filter(m=>m.userData.workspaceStage==='floor-plates').map(m=>m.userData.floorLevel||0)));
+   floor.value=String(item.floorLevel||existing?.userData.floorLevel||nextFloor());
+   const floorY=level=>{const span=Math.max(...item.scale.map(Math.abs))*Math.max(geometrySpan(),.01);const reference=e.pieces().find(m=>m.userData.floorSpacing);return (level-1)*(reference?.userData.floorSpacing||span*.65);};
+   function geometrySpan(){let span=0;for(let i=0;i<item.positions.length;i+=3)span=Math.max(span,Math.abs(item.positions[i]),Math.abs(item.positions[i+1]));return span*2;}
+   floor.onchange=async()=>{
+    const level=Number(floor.value);
+    try{item.floorLevel=level;await access('readwrite',store=>store.put(item));
+     if(e.workflow().active!=='floor-plates'||e.isBusy())return;
+     const matches=e.pieces().filter(m=>e.canEdit(m)&&(m.userData.iterationId===item.id||(!m.userData.iterationId&&m.name===item.name)));
+     if(matches.length){e.checkpoint();for(const mesh of matches){mesh.userData.iterationId=item.id;mesh.userData.floorLevel=level;mesh.position.y=floorY(level);}e.select(matches);e.mark(matches);e.fit();}
+    }catch(error){report(error);}
+   };
+   const floorLabel=document.createElement('label');floorLabel.className='field-label floor-assignment';floorLabel.textContent='Assign floor';floorLabel.append(floor);
    button.onclick=()=>{
     const stage=e.workflow().active;
     if(e.isBusy()||!['resolution','floor-plates'].includes(stage))return;
@@ -102,10 +118,14 @@ function installIterations(e,parent){
     geometry.setAttribute('position',new T.BufferAttribute(positions,3));
     geometry.computeBoundingBox();
     e.checkpoint();
-    const mesh=e.add({geometry,name:item.name,curve:true,offset:stage==='floor-plates'?new T.Vector3(item.position[0],0,-item.position[1]):new T.Vector3().fromArray(item.position),stage:stage==='floor-plates'?stage:'program-outline'});
+    const mesh=e.add({geometry,name:item.name,curve:true,offset:stage==='floor-plates'?new T.Vector3(0,floorY(Number(floor.value)),0):new T.Vector3().fromArray(item.position),stage:stage==='floor-plates'?stage:'program-outline'});
     geometry.dispose();
     if(item.corners)mesh.userData.outlineCorners=structuredClone(item.corners);
     mesh.quaternion.fromArray(item.rotation);
+    if(stage==='floor-plates'){
+     mesh.userData.iterationId=item.id;mesh.userData.floorLevel=Number(floor.value);mesh.userData.floorSpacing=floorY(2);
+     for(const [id,control,record] of floorOptions)if(id!==item.id&&!record.floorLevel)control.value=String(nextFloor());
+    }
     if(stage==='floor-plates')mesh.quaternion.premultiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(1,0,0),-Math.PI/2));
     mesh.scale.fromArray(item.scale);
     mesh.material.color.setHex(item.color);
@@ -128,7 +148,8 @@ function installIterations(e,parent){
     }catch(error){report(error);remove.disabled=false;}
    };
    row.append(button,remove);
-   list.append(row);rows.set(item.id,row);
+   const entry=document.createElement('div');entry.append(floorLabel,row);
+   list.append(entry);rows.set(item.id,entry);floorOptions.push([item.id,floor,item]);
   }
   if(rows.has(previous))picker.value=previous;
   const updateRows=()=>{for(const [id,row] of rows)row.hidden=id!==picker.value;};
@@ -151,6 +172,7 @@ function installIterations(e,parent){
  return {update(program){
   section.querySelector('label').hidden=!program;
   save.hidden=!program;
+  for(const label of list.querySelectorAll('.floor-assignment'))label.hidden=program;
   save.disabled=!program||!selected()||saving||e.isBusy();
   save.classList.toggle('active',!save.disabled);
  }};
