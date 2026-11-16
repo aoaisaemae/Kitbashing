@@ -1,9 +1,9 @@
 import {installSharedLibrary} from './shared-library.js?v=add-all';
 import {installFolderLibrary} from './folder-library.js';
-import {installResolutionTools} from './resolution-tools.js?v=floor-export';
+import {installResolutionTools} from './resolution-tools.js?v=mix-controls';
 import {installProjectMass} from './project-mass.js';
 import {installViewportControls} from './viewport-controls.js';
-import {installWorkflow} from './workflow-tabs.js';
+import {installWorkflow} from './workflow-tabs.js?v=iteration-mix';
 import {installSplit} from './split-tools.js';
 import {organizeProperties} from './properties.js';
 import {installLayers} from './layers.js';
@@ -22,7 +22,7 @@ let selected=null,serial=0,wire=false,busy=false;
 const selection=new Set(),selectionPivot=new T.Object3D(),selectionOutlines=[];let pivotMatrix=new T.Matrix4();
 const renderer=new T.WebGLRenderer({antialias:true,alpha:true,stencil:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x0b0d10);view.append(renderer.domElement);
 const scene=new T.Scene(),camera=new T.PerspectiveCamera(40,1,.1,5000);camera.position.set(110,105,150);
-const programView=()=>workflowTools?.active==='resolution';
+const programView=()=>['resolution','iterations'].includes(workflowTools?.active);
 const floorView=()=>workflowTools?.active==='floor-plates';
 const unitsPerFoot=304.8;
 const programCamera=new T.OrthographicCamera();
@@ -44,7 +44,9 @@ const transform=new TransformControls(camera,renderer.domElement);scene.add(tran
 scene.add(new T.HemisphereLight(0xd6f5ff,0x333045,2.6));const light=new T.DirectionalLight(0xffffff,3);light.position.set(60,100,80);scene.add(light);const rim=new T.DirectionalLight(0xdc24f4,2);rim.position.set(-80,20,-60);scene.add(rim);
 const grid=new T.GridHelper(600,60,0x33434b,0x1c252d);grid.position.y=-.15;scene.add(grid);
 const observer=new ResizeObserver(()=>{renderer.setSize(view.clientWidth,view.clientHeight);camera.aspect=view.clientWidth/view.clientHeight;camera.updateProjectionMatrix();});observer.observe(view);
-renderer.setAnimationLoop(()=>{orbit.update();layerTools?.update();splitTools?.update();workflowTools?.update();cadTools?.update();viewTools?.update();massTools?.update();resolutionTools?.update();layoutTools?.update();selectionOutlines.forEach(({mesh,halo})=>{mesh.updateMatrixWorld(true);halo.geometry=mesh.geometry;halo.matrix.copy(mesh.matrixWorld);halo.matrixWorldNeedsUpdate=true;halo.visible=isVisible(mesh);halo.material.clippingPlanes=mesh.material.clippingPlanes;});transform.camera=displayCamera();renderer.render(scene,transform.camera);});
+renderer.setAnimationLoop(()=>{orbit.update();layerTools?.update();splitTools?.update();workflowTools?.update();cadTools?.update();viewTools?.update();massTools?.update();resolutionTools?.update();layoutTools?.update();selectionOutlines.forEach(({mesh,halo})=>{mesh.updateMatrixWorld(true);halo.geometry=mesh.geometry;halo.matrix.copy(mesh.matrixWorld);halo.matrixWorldNeedsUpdate=true;halo.visible=isVisible(mesh)&&resolutionTools?.allowsMesh(mesh)!==false;halo.material.clippingPlanes=mesh.material.clippingPlanes;});transform.camera=displayCamera();const hidden=pieces.filter(mesh=>mesh.visible&&resolutionTools?.allowsMesh(mesh)===false);
+ for(const mesh of hidden)mesh.visible=false;
+ try{renderer.render(scene,transform.camera);}finally{for(const mesh of hidden)mesh.visible=true;}});
 function say(s){$('#toast').textContent=s;$('#toast').style.display='block';clearTimeout(say.timer);say.timer=setTimeout(()=>$('#toast').style.display='none',5500);$('#status').textContent=s;}
 function material(i){return new T.MeshStandardMaterial({color:colors[i%3],metalness:.28,roughness:.36,wireframe:false});}
 function updateInputs(){for(const el of document.querySelectorAll('[data-prop]')){const p=el.dataset.prop,a=el.dataset.axis;el.disabled=!selected||![...selection].every(canEdit);el.value=selected?(p==='rotation'?T.MathUtils.radToDeg(selected[p][a]):p==='position'?selected[p][a]/unitsPerFoot:selected[p][a]).toFixed(p==='position'?4:2):p==='scale'?'1.00':'0.00';}}
@@ -90,10 +92,33 @@ function addAsset(g,name,folderId=currentFolder==='*'?null:currentFolder||null){
 async function importFiles(files){if(busy||splitTools?.active)return;const importStart=pieces.length;files=Array.from(files);for(const file of files){if(!/\.obj$/i.test(file.name)){say('Choose an OBJ file.');continue;}if(file.size>250*1024*1024){say('Please use OBJ files up to 250 MiB each.');continue;}try{const obj=new OBJLoader().parse(await file.text()),positions=[],parts=[];obj.updateMatrixWorld(true);obj.traverse(m=>{if(m.isMesh){const g=(m.geometry.index?m.geometry.toNonIndexed():m.geometry.clone()).applyMatrix4(m.matrixWorld);const vertices=g.attributes.position.array;for(const v of vertices)positions.push(v);for(const part of splitParts(vertices,true))parts.push(part);g.dispose();}});if(!positions.length)throw Error('No mesh faces found');const whole=new T.BufferGeometry();whole.setAttribute('position',new T.Float32BufferAttribute(positions,3));whole.computeBoundingBox();const center=whole.boundingBox.getCenter(new T.Vector3()),floor=whole.boundingBox.min.y;for(const [i,part] of parts.entries()){const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(part,3));g.translate(-center.x,-floor,-center.z);g.computeBoundingBox();const offset=g.boundingBox.getCenter(new T.Vector3());g.translate(-offset.x,-offset.y,-offset.z);const name=file.name.replace(/\.obj$/i,'')+(parts.length>1?' · part '+(i+1):'');const a=addAsset(g,name);a.offset=offset;addPiece(a);}whole.dispose();say(file.name+' imported · '+parts.length+' editable part(s)');}catch(e){say('Could not import '+file.name+': '+e.message);}}renderAssets();markEdited(pieces.slice(importStart));fit();}
 installFolderLibrary($('#drop'),{importFiles,isBusy:()=>busy||!!splitTools?.active});
 installSharedLibrary($('#drop'),{addPiece:addBundledPiece,finish:pieces=>{markEdited(pieces);fit();},canImport:()=>!busy&&!splitTools?.active&&workflowTools?.active==='figures'});
+async function exportLocalLibrary(button){
+ if(busy||button.disabled)return;
+ const library=assets.filter(asset=>!asset.mass);
+ if(!library.length)return say('No saved library pieces to export.');
+ button.disabled=true;
+ try{
+  const encoder=new TextEncoder();
+  const pieces=library.map(asset=>({name:asset.name,category:asset.folderId,collection:asset.collection,offset:asset.offset?.toArray(),quadLayout:asset.geometry.userData.quadLayout,count:asset.geometry.attributes.position.array.length}));
+  const metadata=encoder.encode(JSON.stringify({version:1,pieces}));
+  const header=new Uint8Array(4);new DataView(header.buffer).setUint32(0,metadata.length,true);
+  const data=new Blob([header,metadata,...library.map(asset=>asset.geometry.attributes.position.array)]);
+  const compressed=await new Response(data.stream().pipeThrough(new CompressionStream('gzip'))).blob();
+  const url=URL.createObjectURL(compressed),link=document.createElement('a');
+  link.href=url;link.download='popmarkit-library.pmk.gz';link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  say('Exported '+pieces.length+' library pieces.');
+ }catch(error){say('Library export failed. '+error.message);}finally{button.disabled=false;}
+}
+const libraryExport=document.createElement('button');
+libraryExport.type='button';libraryExport.textContent='Export Library';
+libraryExport.onclick=()=>exportLocalLibrary(libraryExport);
+$('#drop').after(libraryExport);
 $('#files').onchange=e=>{importFiles(e.target.files);e.target.value='';};for(const type of ['dragover','drop'])$('#drop').addEventListener(type,e=>{e.preventDefault();if(type==='drop')importFiles(e.dataTransfer.files);});
-function fit(){
- const bounds=new T.Box3();
- pieces.filter(isVisible).forEach(mesh=>bounds.expandByObject(mesh));
+function fit(extra,only=false){
+ if(!(extra instanceof T.Box3)&&resolutionTools?.fitGrid())return;
+ const bounds=extra instanceof T.Box3?extra.clone():new T.Box3();
+ if(!only)pieces.filter(isVisible).forEach(mesh=>bounds.expandByObject(mesh));
  if(bounds.isEmpty())return;
  const center=bounds.getCenter(new T.Vector3());
  const flat=programView()||layoutTools?.flat;
@@ -189,7 +214,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)saveWorkspa
 transform.addEventListener('objectChange',syncGroup);
 // Empty-space drag creates a selection window; dragging over an object orbits.
 const marquee=document.createElement('div');marquee.className='selection-window';view.append(marquee);let pointerSelection=null;
-function hitAt(e){const r=renderer.domElement.getBoundingClientRect(),ray=new T.Raycaster();const projection=displayCamera();ray.params.Line.threshold=projection.isOrthographicCamera?(projection.top-projection.bottom)/r.height*6:camera.position.distanceTo(orbit.target)/r.height*5;ray.setFromCamera(new T.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),projection);return ray.intersectObjects(pieces.filter(canEdit),false)[0]?.object||null;}
+function hitAt(e){const r=renderer.domElement.getBoundingClientRect(),ray=new T.Raycaster();const projection=displayCamera();ray.params.Line.threshold=projection.isOrthographicCamera?(projection.top-projection.bottom)/r.height*6:camera.position.distanceTo(orbit.target)/r.height*5;ray.setFromCamera(new T.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),projection);return ray.intersectObjects(pieces.filter(mesh=>canEdit(mesh)&&resolutionTools?.allowsMesh(mesh)!==false),false)[0]?.object||resolutionTools?.pick(e.clientX,e.clientY)||null;}
 
 function cloneAtCurrentTransform(m,suffix=' copy'){const c=addPiece({geometry:m.geometry,name:m.name+suffix,curve:m.isLine});c.position.copy(m.position);c.quaternion.copy(m.quaternion);c.scale.copy(m.scale);c.material.color.copy(m.material.color);c.userData=structuredClone(m.userData);delete c.userData.groupId;c.updateMatrixWorld(true);return c;}
 let altHeld=false,altGizmo=null,directAlt=null;
@@ -211,7 +236,7 @@ $('.nav-hint').textContent='Shift-click: add · Ctrl/Cmd-click: remove · Drag e
 // Object clipboard keeps independent geometry so deletion of the source is safe.
 let objectClipboard=[],pasteCount=0;
 function copyObjects(){if(busy||splitTools?.active||!selection.size)return;objectClipboard.forEach(item=>item.geometry.dispose());objectClipboard=[...selection].map(m=>({geometry:m.geometry.clone(),name:m.name,color:m.material.color.getHex(),position:m.position.clone(),quaternion:m.quaternion.clone(),scale:m.scale.clone(),data:structuredClone(m.userData)}));pasteCount=0;say('Copied '+objectClipboard.length+' object(s). Press Ctrl/Cmd+V to paste.');}
-function pasteObjects(){if(busy||splitTools?.active)return;if(!objectClipboard.length)return say('Select objects and press Ctrl/Cmd+C first.');checkpoint();pasteCount++;const offset=new T.Vector3(10*pasteCount,0,programView()?0:10*pasteCount),copies=[],groups=new Map();for(const item of objectClipboard){const m=addPiece({geometry:item.geometry,name:item.name+' copy',curve:item.data?.outlineCurve});m.position.copy(item.position).add(offset);m.quaternion.copy(item.quaternion);m.scale.copy(item.scale);m.material.color.setHex(item.color);m.userData=structuredClone(item.data);if(item.data.groupId){if(!groups.has(item.data.groupId))groups.set(item.data.groupId,crypto.randomUUID());m.userData.groupId=groups.get(item.data.groupId);}m.userData.workspaceStage=workflowTools?.active==='floor-plates'?'floor-plates':item.data.workspaceStage==='program-outline'||item.data.workspaceStage==='floor-plates'?'program-outline':workflowTools?.active==='project'?'project':'figures';copies.push(m);}setSelection(copies);markEdited(copies);say('Pasted '+copies.length+' object(s).');}
+function pasteObjects(){if(busy||splitTools?.active)return;if(!objectClipboard.length)return say('Select objects and press Ctrl/Cmd+C first.');checkpoint();pasteCount++;const offset=new T.Vector3(10*pasteCount,0,programView()?0:10*pasteCount),copies=[],groups=new Map();for(const item of objectClipboard){const m=addPiece({geometry:item.geometry,name:item.name+' copy',curve:item.data?.outlineCurve});m.position.copy(item.position).add(offset);m.quaternion.copy(item.quaternion);m.scale.copy(item.scale);m.material.color.setHex(item.color);m.userData=structuredClone(item.data);if(item.data.groupId){if(!groups.has(item.data.groupId))groups.set(item.data.groupId,crypto.randomUUID());m.userData.groupId=groups.get(item.data.groupId);}m.userData.workspaceStage=workflowTools?.active==='iterations'?'iterations':workflowTools?.active==='floor-plates'?'floor-plates':item.data.workspaceStage==='program-outline'||item.data.workspaceStage==='floor-plates'?'program-outline':workflowTools?.active==='project'?'project':'figures';copies.push(m);}setSelection(copies);markEdited(copies);say('Pasted '+copies.length+' object(s).');}
 document.addEventListener('keydown',e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable||!(e.ctrlKey||e.metaKey)||e.altKey)return;const key=e.key.toLowerCase();if(key==='c'||key==='v'){e.preventDefault();e.stopImmediatePropagation();if(e.repeat)return;key==='c'?copyObjects():pasteObjects();}},true);
 const clipboardButtons=document.createElement('div');clipboardButtons.className='button-pair';clipboardButtons.style.marginTop='8px';clipboardButtons.innerHTML='<button id="copyObjects" title="Copy selected objects · Ctrl/Cmd+C">Copy</button><button id="pasteObjects" title="Paste objects · Ctrl/Cmd+V">Paste</button>';$('#duplicate').parentElement.after(clipboardButtons);$('#copyObjects').onclick=copyObjects;$('#pasteObjects').onclick=pasteObjects;
 const existingGuide=$('#shortcuts').onclick;$('#shortcuts').onclick=()=>{existingGuide();say($('#toast').textContent+' · Ctrl/Cmd C: copy · Ctrl/Cmd V: paste');};
