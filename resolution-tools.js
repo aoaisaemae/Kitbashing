@@ -1,6 +1,6 @@
 import * as T from './three.js';
 import {installOutline} from './composition-outline.js';
-import {installIterationWorkspace} from './iteration-workspace.js?v=mix-controls';
+import {installIterationWorkspace} from './iteration-workspace.js?v=restore-outline-points';
 
 export function installResolutionTools(e){
  const panel=document.createElement('aside'),constraints=document.createElement('aside');
@@ -46,7 +46,16 @@ export function installResolutionTools(e){
  const ranking=document.createElement('aside');ranking.className='resolution-panel';ranking.hidden=true;e.$('.control-content').append(ranking);
  const library=installIterations(e,panel.firstChild);
  const editor=installIterationWorkspace(e,panel.firstChild,mix,ranking,library);
- return {pick:editor.pick,allowsMesh:editor.allowsMesh,fitGrid:editor.fitGrid,update(){
+ return {pick:editor.pick,allowsMesh:editor.allowsMesh,inWorkspace:editor.inWorkspace,fitGrid:editor.fitGrid,
+  saveKey:()=>[chosen,editor.saveKey()],
+  saveState:()=>({chosen,editor:editor.saveState()}),
+  restoreState(state){
+   if(!state)return;
+   previousStage=e.workflow().active;
+   chosen=state.chosen;
+   editor.restoreState(state.editor);
+  },
+  update(){
   const stage=e.workflow().active,program=stage==='resolution',floor=stage==='floor-plates',iterations=stage==='iterations';
   if(stage!==previousStage){previousStage=stage;chosen=iterations?'curves':floor?'floor':'resolution';}
   outline.update();
@@ -228,7 +237,7 @@ function installIterations(e,parent){
   }catch(error){report(error);}finally{saving=false;}
  };
  load().catch(report);
- return {add:item=>access('readwrite',store=>store.add(item)),list:()=>access('readonly',store=>store.getAll()),update(program,showFloor,iterations){
+ return {add:item=>access('readwrite',store=>store.add(item)),list:()=>access('readonly',store=>store.getAll()),remove:id=>access('readwrite',store=>store.delete(id)),update(program,showFloor,iterations){
   section.querySelectorAll('h3')[1].textContent=iterations?'Input curve':'Saved iterations';
   section.firstElementChild.hidden=iterations||!program;
   const bulk=list.querySelector(".curve-bulk-delete");if(bulk)bulk.hidden=!iterations;
