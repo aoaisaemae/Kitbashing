@@ -1,15 +1,15 @@
 import {installSharedLibrary} from './shared-library.js?v=add-all';
 import {addProgramText} from './rhino-program-text.js';
-import {installFolderLibrary} from './folder-library.js';
-import {installResolutionTools} from './resolution-tools.js?v=rhino-program-text';
+import {installFolderLibrary} from './folder-library.js?v=saved-selection-and-project';
+import {installResolutionTools} from './resolution-tools.js?v=saved-selection-and-project';
 import {installProjectMass} from './project-mass.js';
 import {installViewportControls} from './viewport-controls.js';
-import {installWorkflow} from './workflow-tabs.js?v=iteration-mix';
+import {installWorkflow} from './workflow-tabs.js?v=saved-selection-and-project';
 import {installSplit} from './split-tools.js';
 import {organizeProperties} from './properties.js';
 import {installLayers} from './layers.js';
 import {describeShape,matchReferences} from './shape-features.js';
-import {installReferenceLayout} from './reference-layout.js';
+import {installReferenceLayout} from './reference-layout.js?v=saved-selection-and-project';
 import {installCad} from './cad-tools.js';
 import {quadMesh} from './quad-mesh.js';
 import * as T from 'three';
@@ -28,13 +28,15 @@ const floorView=()=>workflowTools?.active==='floor-plates';
 const unitsPerFoot=304.8;
 const programCamera=new T.OrthographicCamera();
 function displayCamera(){
- const flat=programView(),axon=floorView()&&layoutTools?.axonometric;
- if(!flat&&!axon)return camera;
+ const flat=programView(),plan=floorView()&&layoutTools?.floorPlan,axon=floorView()&&layoutTools?.axonometric;
+ if(!flat&&!axon&&!plan)return camera;
  const distance=Math.max(.01,camera.position.distanceTo(orbit.target));
  const half=distance*Math.tan(T.MathUtils.degToRad(camera.fov/2));
  programCamera.left=-half*camera.aspect;programCamera.right=-programCamera.left;
  programCamera.top=half;programCamera.bottom=-half;programCamera.near=camera.near;programCamera.far=camera.far;
  programCamera.position.copy(camera.position);
+ programCamera.up.copy(camera.up);
+ if(plan){programCamera.up.set(0,0,-1);programCamera.position.copy(orbit.target).add(new T.Vector3(0,distance,0));}
  if(flat)programCamera.position.copy(orbit.target).add(new T.Vector3(0,0,distance));
  programCamera.lookAt(orbit.target);programCamera.updateProjectionMatrix();programCamera.updateMatrixWorld(true);
  return programCamera;
@@ -54,7 +56,7 @@ function updateInputs(){for(const el of document.querySelectorAll('[data-prop]')
 for(const [prop,title] of [['position','Position · ft'],['rotation','Rotation · °'],['scale','Scale']]){$('#transforms').insertAdjacentHTML('beforeend',`<label class="transform-label">${title}</label><div class="inputs">${['x','y','z'].map(axis=>`<label>${axis.toUpperCase()}<input aria-label="${prop} ${axis}" data-prop="${prop}" data-axis="${axis}" type="number" step="${prop==='scale'?'.1':'1'}"></label>`).join('')}</div>`);}
 $('#transforms').addEventListener('change',e=>{if(busy||splitTools?.active||!selected||![...selection].every(canEdit)||!e.target.dataset.prop)return;let n=Number(e.target.value);const p=e.target.dataset.prop;if(!Number.isFinite(n)||(p==='scale'&&n<=0)){say('Scale must be positive.');updateInputs();return;}selected[p][e.target.dataset.axis]=p==='rotation'?T.MathUtils.degToRad(n):p==='position'?n*unitsPerFoot:n;syncGroup();updateInputs();});
 function select(mesh){setSelection(mesh?[mesh]:[]);}
-function selectionGroup(mesh){if(!mesh?.userData.groupId)return mesh?[mesh]:[];return pieces.filter(m=>m.userData.groupId===mesh.userData.groupId&&isVisible(m));}
+function selectionGroup(mesh){if(mesh?.isLine&&mesh.userData.workspaceStage==='floor-plates')return [mesh];if(!mesh?.userData.groupId)return mesh?[mesh]:[];return pieces.filter(m=>m.userData.groupId===mesh.userData.groupId&&isVisible(m));}
 function setSelection(meshes){meshes=meshes.flatMap(selectionGroup);selection.clear();meshes.filter(m=>pieces.includes(m)&&canEdit(m)).forEach(m=>selection.add(m));selectionOutlines.splice(0).forEach(({halo})=>{scene.remove(halo);halo.material.dispose();});
  for(const mesh of selection){
   const material=new T.ShaderMaterial({

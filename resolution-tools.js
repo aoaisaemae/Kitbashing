@@ -1,7 +1,8 @@
-import {installFloorAssembly} from './floor-assembly.js?v=rhino-program-text';
+import {installSavedPicker} from './saved-picker.js';
+import {installFloorAssembly} from './floor-assembly.js?v=saved-selection-and-project';
 import * as T from './three.js';
 import {installOutline} from './composition-outline.js';
-import {installIterationWorkspace} from './iteration-workspace.js?v=rhino-program-text';
+import {installIterationWorkspace} from './iteration-workspace.js?v=saved-selection-and-project';
 
 export function installResolutionTools(e){
  const panel=document.createElement('aside'),constraints=document.createElement('aside');
@@ -54,7 +55,7 @@ export function installResolutionTools(e){
  floors.setStore(library);
  floors.mount(panel.firstChild);
  const editor=installIterationWorkspace(e,panel.firstChild,mix,ranking,savePanel,library);
- return {exportRhino:floors.exportRhino,pick:editor.pick,allowsMesh:mesh=>editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:mesh=>editor.inWorkspace(mesh)&&floors.inWorkspace(mesh),fitGrid:editor.fitGrid,
+ return {exportRhino:floors.exportRhino,pick:(x,y)=>editor.pick(x,y)||floors.pick(x,y),allowsMesh:mesh=>editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:mesh=>editor.inWorkspace(mesh)&&floors.inWorkspace(mesh),fitGrid:editor.fitGrid,
   saveKey:()=>[chosen,editor.saveKey(),floors.save()],
   saveState:()=>({chosen,editor:editor.saveState(),floors:floors.save()}),
   restoreState(state){
@@ -214,24 +215,12 @@ function installIterations(e,parent,floors){
   const updateRows=()=>{for(const [id,row] of rows)row.hidden=id!==picker.value;};
   picker.onchange=updateRows;updateRows();
   insertAll.onclick=()=>insertCurves(inserters);
-  const bulk=document.createElement('details');bulk.className='curve-bulk-delete';
-  bulk.innerHTML='<summary>Delete multiple curves</summary><div class="curve-delete-list"></div><button type="button" disabled>Delete selected</button>';
-  list.append(bulk);
-  const checks=bulk.querySelector('div'),removeSelected=bulk.querySelector('button');
-  for(const item of items){
-   const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.value=item.id;
-   label.append(check,document.createTextNode(item.name));checks.append(label);
-  }
-  checks.onchange=()=>{removeSelected.disabled=!checks.querySelector(':checked');};
-  removeSelected.onclick=async()=>{
-   const ids=[...checks.querySelectorAll(':checked')].map(check=>check.value);
-   if(!ids.length)return;
-   removeSelected.disabled=true;
-   try{
-    await access('readwrite',store=>{for(const id of ids.slice(0,-1))store.delete(id);return store.delete(ids.at(-1));});
-    await load();status.textContent='Deleted '+ids.length+' curves from the list.';
-   }catch(error){report(error);removeSelected.disabled=false;}
-  };
+
+  for(const entry of rows.values())entry.querySelector('.button-pair').hidden=true;
+  installSavedPicker(picker,{status,isBusy:e.isBusy,
+   onInsert:ids=>insertCurves(ids.map(id=>inserters[items.findIndex(item=>item.id===id)]).filter(Boolean)),
+   onDelete:async ids=>{await access('readwrite',store=>{for(const id of ids.slice(0,-1))store.delete(id);return store.delete(ids.at(-1));});await load();status.textContent='Deleted '+ids.length+' saved curves.';}
+  });
 
  }
  function insertCurves(placements){
@@ -258,7 +247,7 @@ function installIterations(e,parent,floors){
   section.firstElementChild.hidden=iterations||!program;
   const bulk=list.querySelector(".curve-bulk-delete");if(bulk)bulk.hidden=!iterations;
   rhinoImport.hidden=!showFloor;
-  importButton.hidden=!iterations;insertAll.hidden=!(iterations||showFloor);
+  importButton.hidden=!iterations;insertAll.hidden=true;
   section.querySelector('label').hidden=!program;
   save.hidden=!program;
   for(const label of list.querySelectorAll('.floor-assignment'))label.hidden=!showFloor;

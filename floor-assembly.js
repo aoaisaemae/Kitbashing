@@ -1,9 +1,11 @@
-import {floorRhinoFile} from './floor-rhino.js?v=rhino-program-text';
+import {installSavedPicker} from './saved-picker.js';
+import {floorPlanPages,illustratorFloorPlans} from './floor-plan-export.js';
+import {floorRhinoFile} from './floor-rhino.js?v=saved-selection-and-project';
 import {quadMesh} from './quad-mesh.js';
-import {downloadMatrix} from './matrix-files.js?v=rhino-program-text';
-import {installFloorSpecs,planArea,planInterior,scaleFigure} from './floor-specs.js?v=rhino-program-text';
+import {downloadMatrix} from './matrix-files.js?v=saved-selection-and-project';
+import {installFloorSpecs,planArea,planInterior,scaleFigure} from './floor-specs.js?v=saved-selection-and-project';
 import {traceCombinedContour} from './combined-contour.js';
-import {splitCurvePaths} from './iteration-workspace.js?v=rhino-program-text';
+import {splitCurvePaths} from './iteration-workspace.js?v=saved-selection-and-project';
 import * as T from './three.js';
 
 const foot=304.8;
@@ -81,9 +83,9 @@ export function installFloorAssembly(e,reality,savePanel){
  const preview=new T.Group();
  e.scene.add(preview);
  let combinedOnly=false,outlineKey='';
- const isolation={floor:0,circulation:true,bathrooms:true,programs:true};
+ const isolation={floors:[1,2,3,4,5],circulation:true,bathrooms:true,programs:true,overall:true};
  let isolate;
- const floorShown=n=>!isolation.floor||n===isolation.floor;
+ const floorShown=n=>isolation.floors.includes(n);
  function inWorkspace(mesh){
   if(e.workflow().active!=='floor-plates'||mesh.userData.workspaceStage!=='floor-plates')return true;
   const data=mesh.userData;
@@ -91,8 +93,10 @@ export function installFloorAssembly(e,reality,savePanel){
   if(data.restroom&&!isolation.bathrooms)return false;
   return !Number.isInteger(data.floorLevel)||floorShown(data.floorLevel);
  }
- function setOutlineMode(enabled){
+ function setOutlineMode(enabled,updatePrograms=true){
   combinedOnly=enabled;
+  if(updatePrograms)isolation.programs=!enabled;
+  if(isolate)isolate.querySelector('.isolate-programs').checked=isolation.programs;
   toggle.setAttribute('aria-pressed',String(enabled));
   toggle.textContent=enabled?'Show individual pieces':'Show combined outlines only';
 
@@ -122,11 +126,11 @@ export function installFloorAssembly(e,reality,savePanel){
  }
  function updateOutlines(){
   const active=e.workflow().active==='floor-plates';
-  if(active)for(const mesh of floorMeshes())mesh.material.color.setHex(colorFor(mesh.userData.floorLevel));
-  preview.visible=active&&isolation.programs;
+  if(active)for(const mesh of floorMeshes())mesh.material.color.setHex(e.selection().includes(mesh)?0xdc24f4:colorFor(mesh.userData.floorLevel));
+  preview.visible=active&&(isolation.programs||isolation.overall);
   if(!preview.visible)return;
   const outlines=floorPlans();
-  for(const child of preview.children)child.visible=floorShown(child.userData.floorLevel);
+  for(const child of preview.children)child.visible=floorShown(child.userData.floorLevel)&&(child.userData.programLabel?isolation.programs:isolation.overall);
   if(planKey===outlineKey)return;
   outlineKey=planKey;
   for(const line of [...preview.children]){line.removeFromParent();line.geometry?.dispose();line.material.map?.dispose();line.material.dispose();}
@@ -134,12 +138,12 @@ export function installFloorAssembly(e,reality,savePanel){
    if(points.length<2)continue;
    const geometry=new T.BufferGeometry().setFromPoints(points.map(([x,z])=>new T.Vector3(x,y,z)));
    const perimeter=new T.LineLoop(geometry,new T.LineBasicMaterial({color:colorFor(n)}));
-   perimeter.userData.floorLevel=n;perimeter.visible=floorShown(n);preview.add(perimeter);
+   perimeter.userData.floorLevel=n;perimeter.visible=floorShown(n)&&isolation.overall;preview.add(perimeter);
    if(points.length>=3){
     const shape=new T.Shape(points.map(([x,z])=>new T.Vector2(x,-z)));
     const fill=new T.Mesh(new T.ShapeGeometry(shape).rotateX(-Math.PI/2).translate(0,y,0),
      new T.MeshBasicMaterial({color:colorFor(n),transparent:true,opacity:.14,side:T.DoubleSide,depthWrite:false}));
-    fill.userData.floorLevel=n;fill.visible=floorShown(n);preview.add(fill);
+    fill.userData.floorLevel=n;fill.visible=floorShown(n)&&isolation.overall;preview.add(fill);
    }
   }
   for(const mesh of floorMeshes()){
@@ -161,7 +165,7 @@ export function installFloorAssembly(e,reality,savePanel){
    ctx.font='bold '+fontSize+'px Arial';ctx.fillText(title,512,64);
    const texture=new T.CanvasTexture(canvas),width=radius*1.7,height=width/8;
    const label=new T.Mesh(new T.PlaneGeometry(width,height).rotateX(-Math.PI/2),new T.MeshBasicMaterial({map:texture,transparent:true,side:T.DoubleSide,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2}));
-   label.position.set(center[0],mesh.position.y+2,center[1]);label.userData.floorLevel=mesh.userData.floorLevel;label.visible=floorShown(label.userData.floorLevel);label.raycast=()=>{};preview.add(label);
+   label.position.set(center[0],mesh.position.y+2,center[1]);label.userData.floorLevel=mesh.userData.floorLevel;label.userData.programLabel=true;label.visible=floorShown(label.userData.floorLevel)&&isolation.programs;label.raycast=()=>{};preview.add(label);
   }
 
  }
@@ -256,17 +260,23 @@ export function installFloorAssembly(e,reality,savePanel){
  };
  const specs=installFloorSpecs(e,floorPlans,n=>placeFloorObject(scaleFigure(),n,'scalee','Scalee'));
  isolate=document.createElement('details');isolate.id='floorIsolate';isolate.className='property-group';
- isolate.innerHTML='<summary>Isolate</summary><div class="property-group-content iteration-editor"><label>Floor <select class="isolate-floor" aria-label="Isolate floor"><option value="0">All floors</option></select></label><label class="ranking-option"><input class="isolate-circulation" type="checkbox" checked> Vertical circulation</label><label class="ranking-option"><input class="isolate-bathrooms" type="checkbox" checked> Bathrooms</label><label class="ranking-option"><input class="isolate-programs" type="checkbox" checked> Program outlines</label></div>';
+ isolate.innerHTML='<summary>Isolate</summary><div class="property-group-content iteration-editor"><fieldset class="isolate-floors"><legend>Floors</legend><label class="ranking-option"><input class="isolate-all-floors" type="checkbox" checked> All floors</label><div class="isolate-floor-options"></div></fieldset><label class="ranking-option"><input class="isolate-circulation" type="checkbox" checked> Vertical circulation</label><label class="ranking-option"><input class="isolate-bathrooms" type="checkbox" checked> Bathrooms</label><label class="ranking-option"><input class="isolate-programs" type="checkbox" checked> Programs and names</label><label class="ranking-option"><input class="isolate-overall" type="checkbox" checked> Overall outline</label></div>';
  e.$('#floorSpecs').after(isolate);
- const isolateFloor=isolate.querySelector('.isolate-floor');
- for(let n=1;n<=5;n++)isolateFloor.add(new Option('Floor 0'+n,String(n)));
+ const allFloors=isolate.querySelector('.isolate-all-floors'),floorOptions=isolate.querySelector('.isolate-floor-options');
+ for(let n=1;n<=5;n++)floorOptions.insertAdjacentHTML('beforeend','<label class="ranking-option"><input class="isolate-floor" type="checkbox" value="'+n+'" checked> Floor 0'+n+'</label>');
+ function syncFloors(){
+  for(const input of floorOptions.querySelectorAll('input'))input.checked=floorShown(Number(input.value));
+  allFloors.checked=isolation.floors.length===5;allFloors.indeterminate=isolation.floors.length>0&&isolation.floors.length<5;
+ }
+ allFloors.onchange=()=>{isolation.floors=allFloors.checked?[1,2,3,4,5]:[];syncFloors();isolationChanged();};
+ for(const input of floorOptions.querySelectorAll('input'))input.onchange=()=>{isolation.floors=[...floorOptions.querySelectorAll('input:checked')].map(input=>Number(input.value));syncFloors();isolationChanged();};
  function isolationChanged(){
   e.select(e.selection().filter(mesh=>inWorkspace(mesh)&&(!combinedOnly||!isPlate(mesh))));
   e.mark();
  }
- isolateFloor.onchange=()=>{isolation.floor=Number(isolateFloor.value);isolationChanged();};
- for(const key of ['circulation','bathrooms'])isolate.querySelector('.isolate-'+key).onchange=event=>{isolation[key]=event.target.checked;isolationChanged();};
- isolate.querySelector('.isolate-programs').onchange=event=>{isolation.programs=event.target.checked;isolationChanged();};
+ 
+ for(const key of ['circulation','bathrooms','overall'])isolate.querySelector('.isolate-'+key).onchange=event=>{isolation[key]=event.target.checked;isolationChanged();};
+ isolate.querySelector('.isolate-programs').onchange=event=>{setOutlineMode(!event.target.checked);isolationChanged();};
 
  function gaps(){
   if(storedGaps)return storedGaps;
@@ -344,6 +354,12 @@ export function installFloorAssembly(e,reality,savePanel){
   status.textContent='Inserted '+record.name+' on Floor '+floorLevel+'.';
   level.value=String(Math.min(5,floorLevel+1));
  };
+ const insertFloorIteration=insert.onclick;
+ installSavedPicker(picker,{insertButton:insert,status,isBusy:e.isBusy,
+  onInsert:ids=>{const before=new Set(e.pieces());for(const id of ids){picker.value=id;insertFloorIteration();}const added=e.pieces().filter(mesh=>!before.has(mesh));e.select(added);e.mark(added);e.fit();},
+  onDelete:async ids=>{for(const id of ids)await store.remove(id);await refresh();status.textContent='Deleted '+ids.length+' saved matrix iterations.';}
+ });
+
  function elevatorGeometry(width,depth,rise){
   const geometry=new T.BoxGeometry(width*foot,rise,depth*foot).translate(0,rise/2,0);
   geometry.computeBoundingBox();
@@ -431,22 +447,22 @@ export function installFloorAssembly(e,reality,savePanel){
   updateStairButtons();
   stairStatus.textContent=mesh.name+(mesh.userData.objectLocked?' locked.':' unlocked.');
  };
- savePanel.innerHTML='<div class="section iteration-editor"><h3>Save floor workspace</h3><label>Workspace name <input class="floor-workspace-name" type="text" maxlength="80"></label><button class="floor-workspace-save" type="button">Save workspace</button><label>Saved workspaces <select class="floor-workspace-library"></select></label><button class="floor-workspace-insert" type="button">Insert workspace</button><button class="floor-rhino-export" type="button">Export everything to Rhino (.3dm)</button><p class="hint">Inserting replaces the current Floor plates workspace. Undo restores the previous workspace.</p><p class="hint" role="status"></p></div>';
+ savePanel.innerHTML='<div class="section iteration-editor"><h3>Save floor workspace</h3><label>Workspace name <input class="floor-workspace-name" type="text" maxlength="80"></label><button class="floor-workspace-save" type="button">Save workspace</button><label>Saved workspaces <select class="floor-workspace-library"></select></label><button class="floor-workspace-insert" type="button">Insert workspace</button><button class="floor-rhino-export" type="button">Export everything to Rhino (.3dm)</button><h3>2D floor plans</h3><label>Export floors <select class="floor-plan-level"><option value="0">All floors - separate pages</option></select></label><button class="floor-plan-export" type="button">Export</button><p class="hint">Vector plans cut 4 ft above each floor. Includes floor outlines, programs, and sections of stairs, elevators, and bathrooms. Open the .ai file in Illustrator; each floor is a separate page.</p><p class="hint">Inserting replaces the current Floor plates workspace. When combining saved workspaces, the first supplies floor spacing and display settings. Undo restores the previous workspace.</p><p class="hint" role="status"></p></div>';
  const workspaceName=savePanel.querySelector('.floor-workspace-name');
  const workspaceLibrary=savePanel.querySelector('.floor-workspace-library');
  const workspaceSave=savePanel.querySelector('.floor-workspace-save'),workspaceInsert=savePanel.querySelector('.floor-workspace-insert');
  const workspaceStatus=savePanel.querySelector('[role=status]');
  const workspacePieces=()=>e.pieces().filter(mesh=>mesh.userData.workspaceStage==='floor-plates');
- const workspaceSettings=()=>({gaps:storedGaps? [...storedGaps]:null,combinedOnly,wallsOn,isolation:{...isolation}});
+ const workspaceSettings=()=>({gaps:storedGaps? [...storedGaps]:null,combinedOnly,wallsOn,isolation:{...isolation,floors:[...isolation.floors]}});
  function restoreSettings(value){
   const savedGaps=Array.isArray(value)?value:value?.gaps;
   storedGaps=savedGaps?[...savedGaps]:null;
   const saved=value?.isolation;
-  isolation.floor=[1,2,3,4,5].includes(saved?.floor)?saved.floor:0;
+  isolation.floors=Array.isArray(saved?.floors)?[...new Set(saved.floors.filter(n=>[1,2,3,4,5].includes(n)))]:saved?.floor?[saved.floor]:[1,2,3,4,5];
   isolation.circulation=saved?.circulation!==false;isolation.bathrooms=saved?.bathrooms!==false;isolation.programs=saved?.programs!==false;
-  isolateFloor.value=String(isolation.floor);
-  for(const key of ['circulation','bathrooms','programs'])isolate.querySelector('.isolate-'+key).checked=isolation[key];
-  setOutlineMode(Boolean(value?.combinedOnly));setWalls(Boolean(value?.wallsOn));updateGap();
+  isolation.overall=saved?.overall!==false;syncFloors();
+  for(const key of ['circulation','bathrooms','programs','overall'])isolate.querySelector('.isolate-'+key).checked=isolation[key];
+  setOutlineMode(Boolean(value?.combinedOnly),false);setWalls(Boolean(value?.wallsOn));updateGap();
  }
  let workspaces=[],saveOpen=false,workspaceBusy=false;
  async function refreshWorkspaces(preferred=workspaceLibrary.value){
@@ -475,8 +491,9 @@ export function installFloorAssembly(e,reality,savePanel){
    await refreshWorkspaces(id);workspaceStatus.textContent='Saved '+name+' on this device.';
   }catch(error){workspaceStatus.textContent=error.message;}finally{workspaceBusy=false;}
  };
- workspaceInsert.onclick=()=>{
-  const record=workspaces.find(item=>item.id===workspaceLibrary.value);
+ function insertWorkspaces(ids){
+  const selected=ids.map(id=>workspaces.find(item=>item.id===id)).filter(Boolean);
+  const record=selected.length?{name:selected.map(item=>item.name).join(' + '),settings:selected[0].settings,members:selected.flatMap(item=>{const groups=new Map();return item.members.map(member=>{const data=structuredClone(member.data);if(data.groupId){if(!groups.has(data.groupId))groups.set(data.groupId,crypto.randomUUID());data.groupId=groups.get(data.groupId);}return {...member,data};});})}:null;
   if(!record||workspaceBusy||e.isBusy())return;
   const current=workspacePieces();
   if(current.length&&!window.confirm('Replace the current Floor plates workspace with "'+record.name+'"?'))return;
@@ -509,7 +526,24 @@ export function installFloorAssembly(e,reality,savePanel){
   }catch(error){workspaceStatus.textContent=error.message;}
   finally{for(const {geometry} of prepared)geometry.dispose();}
  };
+
+ const workspaceSelection=installSavedPicker(workspaceLibrary,{insertButton:workspaceInsert,status:workspaceStatus,isBusy:()=>workspaceBusy||e.isBusy(),onInsert:insertWorkspaces,
+  onDelete:async ids=>{for(const id of ids)await store.remove(id);await refreshWorkspaces();workspaceStatus.textContent='Deleted '+ids.length+' saved workspaces.';}
+ });
  const rhinoExport=savePanel.querySelector('.floor-rhino-export');
+ const planLevel=savePanel.querySelector('.floor-plan-level'),planExport=savePanel.querySelector('.floor-plan-export');
+ let planOptions='';
+ planExport.onclick=()=>{
+  if(exporting||e.isBusy())return;
+  try{
+   refreshWalls();refreshRestrooms();
+   const plans=floorPlans(),pages=floorPlanPages(exportRecords(),plans,Number(planLevel.value));
+   const name=(workspaceName.value.trim()||'popmarkit-floor-plans').replace(/[<>:"/\\|?*]/g,'-');
+   downloadMatrix(illustratorFloorPlans(pages),name+(Number(planLevel.value)?'-floor-'+planLevel.value:'-all-floors')+'.ai','application/pdf');
+   workspaceStatus.textContent='Exported '+pages.length+' Illustrator plan'+(pages.length===1?'':'s')+' at a 4 ft cut height.';
+  }catch(error){workspaceStatus.textContent='Plan export failed: '+error.message;}
+ };
+
  let exporting=false;
  function exportRecords(){
   const records=[];
@@ -573,14 +607,35 @@ export function installFloorAssembly(e,reality,savePanel){
   if(open&&!saveOpen)refreshWorkspaces().catch(error=>{workspaceStatus.textContent=error.message;});
   saveOpen=open;
   if(!open)return;
+  const floors=[...floorPlans().keys()].sort(),options=floors.join(',');
+  if(options!==planOptions){const previous=planLevel.value;planOptions=options;planLevel.replaceChildren(new Option('All floors - separate pages','0'),...floors.map(n=>new Option('Floor 0'+n,String(n))));if(floors.includes(Number(previous)))planLevel.value=previous;}
+  planExport.disabled=exporting||e.isBusy()||!floors.length;
   rhinoExport.disabled=exporting||e.isBusy()||!workspacePieces().length;
   workspaceSave.disabled=workspaceBusy||e.isBusy()||!workspacePieces().length;
-  workspaceInsert.disabled=workspaceBusy||e.isBusy()||!workspaceLibrary.value;
+  workspaceSelection.update();
  }
  return {
+  pick(clientX,clientY){
+   if(e.workflow().active!=='floor-plates')return null;
+   const bounds=e.renderer.domElement.getBoundingClientRect(),ray=new T.Raycaster();
+   ray.params.Line.threshold=e.camera.isOrthographicCamera?(e.camera.top-e.camera.bottom)/bounds.height*8:e.camera.position.distanceTo(e.orbit.target)/bounds.height*8;
+   ray.setFromCamera(new T.Vector2((clientX-bounds.left)/bounds.width*2-1,1-(clientY-bounds.top)/bounds.height*2),e.camera);
+   const candidates=floorMeshes().filter(mesh=>inWorkspace(mesh)&&e.canEdit(mesh));
+   const edge=ray.intersectObjects(candidates,false)[0]?.object;if(edge)return edge;
+   let best=null,bestArea=Infinity;
+   for(const mesh of candidates){
+    mesh.updateWorldMatrix(true,false);const hit=ray.ray.intersectPlane(new T.Plane(new T.Vector3(0,1,0),-mesh.position.y),new T.Vector3());if(!hit)continue;
+    for(const path of splitCurvePaths(mesh.geometry.attributes.position.array).filter(path=>path.closed)){
+     const points=path.points.map(([x,y])=>{const p=new T.Vector3(x,y,0).applyMatrix4(mesh.matrixWorld);return [p.x,p.z];});let inside=false;
+     for(let i=0,j=points.length-1;i<points.length;j=i++){const [ax,az]=points[i],[bx,bz]=points[j];if((az>hit.z)!==(bz>hit.z)&&hit.x<(bx-ax)*(hit.z-az)/(bz-az)+ax)inside=!inside;}
+     const area=planArea(points);if(inside&&area<bestArea){best=mesh;bestArea=area;}
+    }
+   }
+   return best;
+  },
   exportRhino,elevation,updateStairs,mount:parent=>parent.append(section),setStore:value=>{store=value;},
   inWorkspace,
-  allowsMesh:mesh=>inWorkspace(mesh)&&(e.workflow().active!=='floor-plates'||!isPlate(mesh)||(isolation.programs&&!combinedOnly)),
+  allowsMesh:mesh=>inWorkspace(mesh)&&(e.workflow().active!=='floor-plates'||!isPlate(mesh)||isolation.programs||e.selection().includes(mesh)),
   save:workspaceSettings,restore:restoreSettings,
   update(active,showReality,showProperties){
    section.hidden=!active;
