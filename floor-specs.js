@@ -76,8 +76,9 @@ export function installFloorSpecs(e,plans,spawnScalee){
  const floorLines=Array.from({length:5},(_,i)=>{
   const row=document.createElement('p');
   row.textContent='Floor 0'+(i+1)+': —';
-  area.append(row);return row;
+  area.prepend(row);return row;
  });
+ const totalArea=document.createElement('p');totalArea.className='spec-total-area';area.append(totalArea);
  function measure(){
   const a=objects.find(mesh=>mesh.studioId===from.value),b=objects.find(mesh=>mesh.studioId===to.value);
   if(!a||!b||a===b){clear();return;}
@@ -109,6 +110,8 @@ export function installFloorSpecs(e,plans,spawnScalee){
     const text='Floor 0'+(i+1)+': '+(plan?.area>0?number.format(plan.area)+' sq ft':'—');
     if(row.textContent!==text)row.textContent=text;
    }
+   const total=[...floors.values()].reduce((sum,plan)=>sum+(Number.isFinite(plan.area)&&plan.area>0?plan.area:0),0);
+   totalArea.textContent='Total area: '+number.format(total)+' sq ft';
    const key=[...floors.keys()].sort().join(',');
    if(key!==previousFloors||!floor.options.length){
     const selected=floor.value;

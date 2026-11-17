@@ -1,3 +1,4 @@
+import {installSavedPicker} from './saved-picker.js';
 export function installFolderLibrary(drop,{importFiles,isBusy}){
  const panel=document.createElement('section');
  panel.className='folder-library';
@@ -28,7 +29,7 @@ export function installFolderLibrary(drop,{importFiles,isBusy}){
  }
  function render(items,name){
   const previous=picker.value;
-  entries=items.sort((a,b)=>a.path.localeCompare(b.path));
+  entries=items.filter(item=>!omitted.has(item.path)).sort((a,b)=>a.path.localeCompare(b.path));
   picker.replaceChildren();
   for(const item of entries)picker.add(new Option(item.path,item.path));
   if(entries.some(item=>item.path===previous))picker.value=previous;
@@ -89,6 +90,13 @@ export function installFolderLibrary(drop,{importFiles,isBusy}){
   if(isBusy()){status.textContent='Wait for the current operation to finish.';return;}
   await importFiles([file]);
   status.textContent='';
+ });
+
+ const insertFolderItem=add.onclick;
+ const omitted=new Set();
+ installSavedPicker(picker,{insertButton:add,status,isBusy:()=>working||isBusy(),
+  onInsert:async ids=>{for(const id of ids){picker.value=id;await insertFolderItem();}},
+  onDelete:ids=>{for(const id of ids)omitted.add(id);entries=entries.filter(item=>!omitted.has(item.path));render(entries,directory?.name||'Folder');status.textContent='Removed '+ids.length+' models from this list. Files on disk are unchanged.';}
  });
  if(persistent)setting('readonly',store=>store.get('folder')).then(folder=>{
   if(!folder||working||directory)return;

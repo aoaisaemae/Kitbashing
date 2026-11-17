@@ -1,3 +1,4 @@
+import {installSavedPicker} from './saved-picker.js';
 import {programBoundaryGap} from './program-continuity.js?v=piece-rotate-scale';
 import {downloadMatrix,illustratorMatrix,rhinoMatrix} from './matrix-files.js?v=rhino-program-text';
 import * as T from './three.js';
@@ -132,6 +133,12 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   }catch(error){status.textContent='Could not save the iteration. '+error.message;}
   finally{saving=false;save.disabled=!selected().length;}
  };
+ const curvesLibrary=document.createElement('section');curvesLibrary.className='saved-curves-reinsert';
+ curvesLibrary.innerHTML='<h3>Reinsert iteration</h3><label>Saved iteration <select class="curves-iteration-picker" aria-label="Saved iteration to reinsert"></select></label><button class="curves-iteration-insert" type="button" disabled>Insert iteration</button>';
+ controls.append(curvesLibrary);
+ const curvesPicker=curvesLibrary.querySelector('select'),curvesInsert=curvesLibrary.querySelector('button');
+ curvesInsert.onclick=()=>insertSaved(saved.find(record=>record.id===curvesPicker.value),false);
+ let curvesWasOpen=false;
  const deleteSaved=mix.querySelector('.delete-saved-iteration');
  let deleting=false,saved=[],mixWasOpen=false;
  deleteSaved.onclick=async()=>{
@@ -151,6 +158,12 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
    picker.replaceChildren();
    for(const item of saved)picker.add(new Option(item.name,item.id));
    if(saved.some(item=>item.id===preferred))picker.value=preferred;
+   const previous=curvesPicker.value;
+   curvesPicker.replaceChildren(...saved.map(item=>new Option(item.name,item.id)));
+   if(saved.some(item=>item.id===previous))curvesPicker.value=previous;
+   else if(saved.some(item=>item.id===preferred))curvesPicker.value=preferred;
+   if(!saved.length)curvesPicker.add(new Option('No saved iterations',''));
+   curvesInsert.disabled=!saved.length;
    insert.disabled=!saved.length;
    deleteSaved.disabled=deleting||!saved.length;
    if(!saved.length)mixStatus.textContent='Save a named selection in Curves first.';
@@ -161,8 +174,8 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   savedPanel.hidden=!savedPanel.hidden;savedToggle.setAttribute('aria-expanded',String(!savedPanel.hidden));
   if(!savedPanel.hidden)refreshSaved();
  };
- insert.onclick=()=>{
-  const item=saved.find(record=>record.id===picker.value);
+ insert.onclick=()=>insertSaved(saved.find(record=>record.id===picker.value),true);
+ function insertSaved(item,forMix){
   if(!item||opening||e.isBusy()||!inIterations())return;
   opening=true;
   try{
@@ -173,13 +186,21 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
     const mesh=e.add({geometry,name:member.name,curve:true,offset:new T.Vector3().fromArray(member.position),stage:'iterations'});
     geometry.dispose();
     mesh.quaternion.fromArray(member.rotation);mesh.scale.fromArray(member.scale);mesh.material.color.setHex(member.color);
-    Object.assign(mesh.userData,{groupId:group,savedIterationId:item.id,program:member.program,floorLevel:member.floorLevel});
+    Object.assign(mesh.userData,{groupId:group,...(forMix?{savedIterationId:item.id}:{sourceIterationId:item.id}),program:member.program,floorLevel:member.floorLevel});
     return mesh;
    });
-   e.select(meshes);e.mark(meshes);e.fit();mixStatus.textContent='Inserted '+item.name+'.';
+   e.select(meshes);e.mark(meshes);e.fit();mixStatus.textContent=status.textContent='Inserted '+item.name+'.';
   }finally{opening=false;}
  };
 
+
+ async function deleteIterations(ids){for(const id of ids)await store.remove(id);await refreshSaved();status.textContent=mixStatus.textContent='Deleted '+ids.length+' saved iterations.';}
+ function insertIterations(ids,forMix){
+  const before=new Set(e.pieces());for(const id of ids)insertSaved(saved.find(item=>item.id===id),forMix);
+  const added=e.pieces().filter(mesh=>!before.has(mesh));e.select(added);e.mark(added);e.fit();
+ }
+ installSavedPicker(picker,{insertButton:insert,deleteButton:deleteSaved,status:mixStatus,isBusy:e.isBusy,onInsert:ids=>insertIterations(ids,true),onDelete:deleteIterations});
+ installSavedPicker(curvesPicker,{insertButton:curvesInsert,status,isBusy:e.isBusy,onInsert:ids=>insertIterations(ids,false),onDelete:deleteIterations});
  const gridSize=mix.querySelector('.iteration-grid-size'),cellSize=mix.querySelector('.iteration-cell-size');
  const maxGridDimension=10;
  function clampGridDimension(input){
@@ -1144,6 +1165,36 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   if(!record||fileBusy||e.isBusy())return;
   try{insertMatrix(record);matrixName.value=record.name;matrixStatus.textContent='Inserted '+record.name+'.';}catch(error){reportMatrix(error);}
  };
+
+ function insertMatrixBatch(ids){
+  if(ids.length===1){const record=matrices.find(item=>item.id===ids[0]);if(record)insertMatrix(record);return;}
+  if(fileBusy||e.isBusy())return;
+  const selected=ids.map(id=>matrices.find(item=>item.id===id)).filter(Boolean),added=[];
+  e.checkpoint();let right=grid?grid.left+grid.columns*grid.cell:0;
+  for(const record of selected){
+   const saved=record.state?.grid;if(!saved?.seed?.parts)continue;
+   const dx=right+saved.cell-saved.left,dy=(grid?.top??saved.top)-saved.top,layouts=new Map(saved.layouts),deleted=new Set(saved.deleted);
+   let first=true;
+   for(let index=0;index<saved.rows*saved.columns;index++){
+    if(deleted.has(index)||index&&!layouts.has(index))continue;
+    const group=crypto.randomUUID();
+    saved.seed.parts.forEach((part,i)=>{
+     const row=index?layouts.get(index)[i]:[saved.left+saved.cell/2+part.center.x-saved.seed.center.x,saved.top-saved.cell/2+part.center.y-saved.seed.center.y,0,1];
+     if(!row)return;const [x,y,degrees,scale=1]=row,angle=degrees*Math.PI/180,c=Math.cos(angle),sn=Math.sin(angle),positions=[];
+     for(const path of part.paths){const points=path.points.map(([px,py])=>{const ox=(px-part.center.x)*scale,oy=(py-part.center.y)*scale;return [x+dx+c*ox-sn*oy,y+dy+sn*ox+c*oy,0];});for(let j=1;j<points.length;j++)positions.push(...points[j-1],...points[j]);}
+     if(!positions.length)return;const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.Float32BufferAttribute(positions,3));geometry.computeBoundingBox();
+     const mesh=e.add({geometry,name:record.name+' · '+(part.program||'piece '+(i+1)),curve:true,offset:new T.Vector3(),stage:'iterations'});geometry.dispose();
+     Object.assign(mesh.userData,{groupId:group,savedIterationId:record.id,matrixBatch:true,program:part.program||''});
+     if(first){mesh.userData.savedMatrixState=structuredClone(record.state);first=false;}added.push(mesh);
+    });
+   }
+   right+=saved.cell*(saved.columns+1);
+  }
+  isolated=null;selectedPiece=null;visualKey='';e.select(added);e.mark(added);e.fit();matrixStatus.textContent='Inserted '+selected.length+' saved matrices side by side. Each retains its saved matrix settings.';
+ }
+ const matrixSelection=installSavedPicker(matrixLibrary,{insertButton:byClass('.matrix-insert'),status:matrixStatus,isBusy:()=>fileBusy||e.isBusy(),onInsert:insertMatrixBatch,
+  onDelete:async ids=>{for(const id of ids)await store.remove(id);await refreshMatrices();matrixStatus.textContent='Deleted '+ids.length+' saved matrices.';}
+ });
  byClass('.matrix-cell-save').onclick=async()=>{
   if(fileBusy||e.isBusy()||!grid||cellPicker.value==='')return;
   const input=byClass('.matrix-cell-name'),name=input.value.trim();
@@ -1185,10 +1236,12 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
    else if(ids.includes(Number(previous)))cellPicker.value=previous||'0';
   }
   for(const selector of ['.matrix-save','.matrix-ai','.matrix-rhino','.matrix-cell-save'])byClass(selector).disabled=fileBusy||!grid;
-  byClass('.matrix-insert').disabled=fileBusy||!matrixLibrary.value;
+  matrixSelection.update();
  }
    return {allowsMesh,inWorkspace,fitGrid,saveKey,saveState,restoreState,
   update(active,showMix){
+   const curvesOpen=active&&!showMix;
+   if(curvesOpen&&!curvesWasOpen)refreshSaved();curvesWasOpen=curvesOpen;
    refreshPrograms();
    continuityButton.disabled=!grid?.mixed||!programPairs().length||!validPairs();
    updateSavePanel();

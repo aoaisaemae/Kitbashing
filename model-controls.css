@@ -21,3 +21,8 @@
 .control-content button.layer-state-icon{color:#8b959b;display:inline-flex;align-items:center;justify-content:center}.layer-state-icon svg{width:15px;height:15px;flex-shrink:0}.control-content button.layer-state-icon:hover{color:#c5cdd1;background:#101c20}.layer-state-icon:focus-visible{outline:1px solid #21e0ed;outline-offset:1px}
 .split-panel{width:248px;max-width:calc(100% - 24px);max-height:min(350px,60%);left:12px;top:12px;padding:9px;scrollbar-gutter:stable}.split-panel .split-title{position:sticky;top:-9px;z-index:2;background:#010c0f;padding:5px 0}.split-panel .hint{margin:6px 0}.split-panel .split-levels{margin:7px 0;gap:4px}.split-panel .split-levels button{padding:6px 4px}.split-panel .split-field{margin:7px 0}.split-panel .repair-check{margin:7px 0}.split-panel .split-notes{margin:6px 0}@media(max-height:720px){.split-panel{max-height:60%;top:8px;left:8px;padding:8px}}@media(max-width:760px){.split-panel{width:222px;max-height:55%}}
 .spec-distance-pair{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:6px}.spec-distance-pair select{min-width:0;width:100%}.spec-floor-areas p{margin:5px 0;font-size:11px}
+
+.isolate-floors{border:1px solid #12343b;padding:10px;margin:0 0 14px;}.isolate-floors legend{color:#9acbd0;padding:0 5px}.isolate-floor-options{padding-left:18px}
+
+.saved-picker-controls{border:1px solid #12343b;padding:10px;margin:10px 0}.saved-picker-checks{max-height:220px;overflow:auto}.saved-picker-checks .ranking-option{display:flex;gap:8px;align-items:center}.spec-total-area{border-top:1px solid #1b4950;padding-top:10px;font-weight:bold}
+.saved-picker-checks input[type=checkbox]{width:auto;margin:0;flex:none}
