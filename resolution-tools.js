@@ -1,6 +1,7 @@
+import {installFloorAssembly} from './floor-assembly.js';
 import * as T from './three.js';
 import {installOutline} from './composition-outline.js';
-import {installIterationWorkspace} from './iteration-workspace.js?v=restore-outline-points';
+import {installIterationWorkspace} from './iteration-workspace.js?v=matrix-save';
 
 export function installResolutionTools(e){
  const panel=document.createElement('aside'),constraints=document.createElement('aside');
@@ -40,20 +41,26 @@ export function installResolutionTools(e){
  figureTab.onclick=()=>layout.tab('figure-resolution');
 
  const reality=document.createElement('aside');reality.className='resolution-panel';reality.hidden=true;reality.innerHTML='<div class="section"><h3>Reality</h3></div>';e.$('.control-content').append(reality);
- const iterationLabels=['01 / CURVES','02 / MIX','03 / RANKING'];
- const iterationTabs=iterationLabels.map((label,i)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.hidden=true;b.onclick=()=>{chosen=['curves','mix','iteration-reality'][i];};e.$('.panel-tabs').append(b);return b;});
+ const iterationLabels=['01 / CURVES','02 / MIX','03 / RANKING','04 / SAVE'];
+ const iterationPanels=['curves','mix','iteration-reality','iteration-save'];
+ const iterationTabs=iterationLabels.map((label,i)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.hidden=true;b.onclick=()=>{chosen=iterationPanels[i];};e.$('.panel-tabs').append(b);return b;});
  const mix=document.createElement('aside');mix.className='resolution-panel';mix.hidden=true;e.$('.control-content').append(mix);
  const ranking=document.createElement('aside');ranking.className='resolution-panel';ranking.hidden=true;e.$('.control-content').append(ranking);
- const library=installIterations(e,panel.firstChild);
- const editor=installIterationWorkspace(e,panel.firstChild,mix,ranking,library);
+ const savePanel=document.createElement('aside');savePanel.className='resolution-panel';savePanel.hidden=true;e.$('.control-content').append(savePanel);
+ const floors=installFloorAssembly(e,reality);
+ const library=installIterations(e,panel.firstChild,floors);
+ floors.setStore(library);
+ floors.mount(panel.firstChild);
+ const editor=installIterationWorkspace(e,panel.firstChild,mix,ranking,savePanel,library);
  return {pick:editor.pick,allowsMesh:editor.allowsMesh,inWorkspace:editor.inWorkspace,fitGrid:editor.fitGrid,
-  saveKey:()=>[chosen,editor.saveKey()],
-  saveState:()=>({chosen,editor:editor.saveState()}),
+  saveKey:()=>[chosen,editor.saveKey(),floors.save()],
+  saveState:()=>({chosen,editor:editor.saveState(),floors:floors.save()}),
   restoreState(state){
    if(!state)return;
    previousStage=e.workflow().active;
    chosen=state.chosen;
    editor.restoreState(state.editor);
+   floors.restore(state.floors);
   },
   update(){
   const stage=e.workflow().active,program=stage==='resolution',floor=stage==='floor-plates',iterations=stage==='iterations';
@@ -67,22 +74,24 @@ export function installResolutionTools(e){
   reality.hidden=!floor||chosen!=='reality';
   ranking.hidden=!iterations||chosen!=='iteration-reality';
   mix.hidden=!iterations||chosen!=='mix';
+  savePanel.hidden=!iterations||chosen!=='iteration-save';
   constraints.hidden=!program||chosen!=='constraints';
   for(const button of e.$('.panel-tabs').querySelectorAll('button')){
    if(button===figureTab){button.hidden=stage!=='figures';continue;}
    const iterationIndex=iterationTabs.indexOf(button);
-   if(iterationIndex>=0){button.hidden=!iterations;button.classList.toggle('active',iterations&&chosen===['curves','mix','iteration-reality'][iterationIndex]);continue;}
+   if(iterationIndex>=0){button.hidden=!iterations;button.classList.toggle('active',iterations&&chosen===iterationPanels[iterationIndex]);continue;}
    const index=tabs.indexOf(button);
    button.hidden=iterations|| (index===-1?program||floor:index>=2?!floor:!program);
    if(index>=0)button.classList.toggle('active',(index>=2?floor:program)&&chosen===['resolution','constraints','floor','properties','reality'][index]);
   }
-  if(program||floor||iterations)for(const aside of e.$('.control-content').querySelectorAll(':scope > aside'))if(aside!==panel&&aside!==constraints&&aside!==reality&&aside!==mix&&aside!==ranking)aside.hidden=aside!==inspector||!showProperties;
+  if(program||floor||iterations)for(const aside of e.$('.control-content').querySelectorAll(':scope > aside'))if(aside!==panel&&aside!==constraints&&aside!==reality&&aside!==mix&&aside!==ranking&&aside!==savePanel)aside.hidden=aside!==inspector||!showProperties;
   library.update(program,floor,iterations);
-  editor.update(iterations,iterations&&['mix','iteration-reality'].includes(chosen));
+  floors.update(floor&&chosen==='floor',floor&&chosen==='reality');
+  editor.update(iterations,iterations&&['mix','iteration-reality','iteration-save'].includes(chosen));
  }};
 }
 
-function installIterations(e,parent){
+function installIterations(e,parent,floors){
  const section=document.createElement('section');
  section.innerHTML='<h3>Save Iteration</h3><label class="field-label iteration-name">Iteration name <input type="text" maxlength="80" placeholder="Name this iteration"></label><button type="button" disabled>Save Iteration</button><p class="hint" role="status"></p><h3>Saved iterations</h3><div></div>';
  parent.append(section);
@@ -138,17 +147,16 @@ function installIterations(e,parent){
    const floor=document.createElement('select');floor.setAttribute('aria-label','Assign floor for '+item.name);
    for(let n=1;n<=5;n++)floor.add(new Option('Floor '+n,String(n)));
    const existing=e.pieces().find(m=>m.userData.workspaceStage==='floor-plates'&&(m.userData.iterationId===item.id||(!m.userData.iterationId&&m.name===item.name)));
-   const nextFloor=()=>Math.min(5,1+Math.max(0,...e.pieces().filter(m=>m.userData.workspaceStage==='floor-plates').map(m=>m.userData.floorLevel||0)));
+   const nextFloor=()=>Math.min(5,1+Math.max(0,...e.pieces().filter(m=>m.userData.workspaceStage==='floor-plates'&&!m.userData.egressStair).map(m=>m.userData.floorLevel||0)));
    floor.value=String(Math.min(5,item.floorLevel||existing?.userData.floorLevel||nextFloor()));
-   const floorY=level=>{const span=Math.max(...item.scale.map(Math.abs))*Math.max(geometrySpan(),.01);const reference=e.pieces().find(m=>m.userData.floorSpacing);return (level-1)*(reference?.userData.floorSpacing||span*.65);};
-   function geometrySpan(){let span=0;for(let i=0;i<item.positions.length;i+=3)span=Math.max(span,Math.abs(item.positions[i]),Math.abs(item.positions[i+1]));return span*2;}
+   const floorY=floors.elevation;
    floor.onchange=async()=>{
     if(e.workflow().active==='iterations')return;
     const level=Number(floor.value);
     try{item.floorLevel=level;await access('readwrite',store=>store.put(item));
      if(e.workflow().active!=='floor-plates'||e.isBusy())return;
      const matches=e.pieces().filter(m=>e.canEdit(m)&&(m.userData.iterationId===item.id||(!m.userData.iterationId&&m.name===item.name)));
-     if(matches.length){e.checkpoint();for(const mesh of matches){mesh.userData.iterationId=item.id;mesh.userData.floorLevel=level;mesh.position.y=floorY(level);}e.select(matches);e.mark(matches);e.fit();}
+     if(matches.length){e.checkpoint();for(const mesh of matches){mesh.userData.iterationId=item.id;mesh.userData.floorLevel=level;mesh.position.y=floorY(level);}floors.updateStairs();e.select(matches);e.mark(matches);e.fit();}
     }catch(error){report(error);}
    };
    const floorLabel=document.createElement('label');floorLabel.className='field-label floor-assignment';floorLabel.textContent='Assign floor';floorLabel.append(floor);
@@ -221,7 +229,7 @@ function installIterations(e,parent){
  function insertCurves(placements){
   if(e.isBusy()||!placements.length)return;
   e.checkpoint();const meshes=placements.map(place=>place()).filter(Boolean);
-  if(meshes.length){e.select(meshes);e.mark(meshes);e.fit();status.textContent='Inserted '+meshes.length+' '+(meshes.length===1?'curve.':'curves.');}
+  if(meshes.length){if(e.workflow().active==='floor-plates')floors.updateStairs();e.select(meshes);e.mark(meshes);e.fit();status.textContent='Inserted '+meshes.length+' '+(meshes.length===1?'curve.':'curves.');}
  }
  let saving=false;
  save.onclick=async()=>{
