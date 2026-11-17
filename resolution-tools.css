@@ -35,3 +35,4 @@
 .curve-bulk-delete{margin-top:9px;color:#9cdbe6;font-size:12px}.curve-bulk-delete summary{cursor:pointer;padding:8px 0}.curve-delete-list{max-height:180px;overflow:auto}.curve-delete-list label{display:flex;align-items:center;gap:8px;padding:4px}.curve-delete-list input{accent-color:#21e0ed}
 .iteration-editor label.ranking-option{display:flex;align-items:center;gap:8px}.iteration-editor .ranking-option input[type=checkbox]{width:auto;margin:0;flex:none}
 .iteration-overlay.hide-program-titles text{display:none}
+.program-continuity .continuity-pair{grid-template-columns:auto minmax(0,1fr) auto minmax(0,1fr)}.program-continuity input.continuity-enabled{width:auto;margin:0;accent-color:#21e0ed}

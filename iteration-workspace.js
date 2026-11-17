@@ -1,3 +1,4 @@
+import {programBoundaryGap} from './program-continuity.js';
 import {downloadMatrix,illustratorMatrix,rhinoMatrix} from './matrix-files.js';
 import * as T from './three.js';
 import {traceCombinedContour} from './combined-contour.js';
@@ -195,7 +196,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  let isolated=null,isolationActive=false;
  const lockButton=mix.querySelector('.lock-variation');
  const showGridButton=mix.querySelector('.show-grid');
- ranking.innerHTML='<div class="section iteration-editor"><h3>Ranking</h3><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Separation"> Separation</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Overlapping"> Overlapping</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Continuity"> Continuity</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Rhythm"> Rhythm</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Centrality"> Centrality</label><button class="rank-select" type="button">Select</button><div class="button-pair"><button class="rank-keep" type="button" disabled>KEEP</button><button class="rank-delete" type="button" disabled>DELETE</button></div><div class="button-pair"><button class="rank-lock-all" type="button" disabled>Lock all</button><button class="rank-unlock-all" type="button" disabled>Unlock all</button></div><button class="rank-outline" type="button" aria-pressed="false">Draw Outline</button><button class="rank-points" type="button" aria-pressed="false">PointsOn</button><label>Outline detail <input class="rank-detail" type="range" min="0" max="100" value="100"></label><label>Curvature <input class="rank-curvature" type="range" min="0" max="100" value="50"></label><p class="hint">With PointsOn, double-click a corner to fillet it or an edge to restore a hidden point.</p><button class="rank-show-grid" type="button">Return to full grid</button><p class="hint" role="status"></p></div>';
+ ranking.innerHTML='<div class="section iteration-editor"><h3>Ranking</h3><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Separation"> Separation</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Overlapping"> Overlapping</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Continuity"> Continuity</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Rhythm"> Rhythm</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Centrality"> Centrality</label><section class="program-continuity"><h3>Program continuity</h3><div class="spec-distance-pair"><select class="continuity-from" aria-label="First program"></select><span>next to</span><select class="continuity-to" aria-label="Second program"></select></div><button class="continuity-select" type="button">Select adjacent programs</button><p class="hint">Select variations where these program boundaries touch or are within 1 ft.</p></section><button class="rank-select" type="button">Select</button><div class="button-pair"><button class="rank-keep" type="button" disabled>KEEP</button><button class="rank-delete" type="button" disabled>DELETE</button></div><div class="button-pair"><button class="rank-lock-all" type="button" disabled>Lock all</button><button class="rank-unlock-all" type="button" disabled>Unlock all</button></div><button class="rank-outline" type="button" aria-pressed="false">Draw Outline</button><button class="rank-points" type="button" aria-pressed="false">PointsOn</button><label>Outline detail <input class="rank-detail" type="range" min="0" max="100" value="100"></label><label>Curvature <input class="rank-curvature" type="range" min="0" max="100" value="50"></label><p class="hint">Drag pieces inside an isolated variation to move them. With PointsOn, double-click a corner to fillet it or an edge to restore a hidden point.</p><button class="rank-show-grid" type="button">Return to full grid</button><p class="hint" role="status"></p></div>';
  const rankingStatus=ranking.querySelector('[role=status]');
  const setGridStatus=message=>{mixStatus.textContent=rankingStatus.textContent=message;};
  function cellBounds(index){
@@ -215,7 +216,71 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   event.preventDefault();
   isolateCell(index);
  });
- function updateLockButton(){
+ let selectedPiece=null,pieceDrag=null;
+ function pointerXY(event){
+  const bounds=viewport.getBoundingClientRect();
+  return new T.Vector3((event.clientX-bounds.left)/bounds.width*2-1,1-(event.clientY-bounds.top)/bounds.height*2,0).unproject(e.camera);
+ }
+ function startPieceDrag(event,index,part,mesh=null){
+  if(event.button!==0||!isolationActive||isolated!==index||e.isBusy()||event.altKey||event.ctrlKey||event.metaKey)return;
+  event.preventDefault();event.stopPropagation();
+  if(grid.locked.has(index)||(mesh&&!e.canEdit(mesh))){
+   setGridStatus('Unlock this variation before moving its pieces.');return;
+  }
+  selectedPiece={index,part};
+  updateGridArt(true);
+  e.select([]);
+  pieceDrag={id:event.pointerId,index,part,mesh,start:pointerXY(event),layout:mesh?null:grid.layouts.get(index),
+   position:mesh?.position.clone(),orbit:e.orbit.enabled,transform:e.transform.enabled,changed:false};
+  e.orbit.enabled=false;e.transform.enabled=false;
+  viewport.setPointerCapture(event.pointerId);
+  visualKey='';
+ }
+ function pieceHits(parent,d,index,part,mesh=null){
+  const hit=document.createElementNS(ns,'path');
+  hit.setAttribute('d',d);hit.setAttribute('fill','transparent');hit.setAttribute('fill-rule','evenodd');
+  hit.setAttribute('stroke','transparent');hit.setAttribute('stroke-width','10');hit.setAttribute('vector-effect','non-scaling-stroke');
+  hit.dataset.editPiece=String(part);
+  hit.style.pointerEvents='all';hit.style.cursor='move';
+  hit.addEventListener('pointerdown',event=>startPieceDrag(event,index,part,mesh));
+  hit.addEventListener('dblclick',event=>{event.preventDefault();event.stopPropagation();});
+  parent.append(hit);
+ }
+ viewport.addEventListener('pointermove',event=>{
+  const drag=pieceDrag;
+  if(!drag||drag.id!==event.pointerId)return;
+  event.preventDefault();event.stopPropagation();
+  const delta=pointerXY(event).sub(drag.start);
+  if(!drag.changed&&delta.lengthSq()<1e-10)return;
+  if(!drag.changed){e.checkpoint();drag.changed=true;}
+  if(drag.mesh){
+   drag.mesh.position.copy(drag.position).add(new T.Vector3(delta.x,delta.y,0));drag.mesh.updateMatrixWorld(true);
+  }else{
+   const layout=drag.layout.map(row=>[...row]);
+   layout[drag.part][0]+=delta.x;layout[drag.part][1]+=delta.y;
+   grid.layouts.set(drag.index,layout);
+   updateGridArt(true);
+  }
+  grid.ver++;visualKey='';
+ });
+ function endPieceDrag(event){
+  const drag=pieceDrag;
+  if(!drag||drag.id!==event.pointerId)return;
+  event.preventDefault();event.stopPropagation();
+  pieceDrag=null;
+  e.orbit.enabled=drag.orbit;e.transform.enabled=drag.transform;
+  if(viewport.hasPointerCapture(event.pointerId))viewport.releasePointerCapture(event.pointerId);
+  if(event.type!=='pointerup'&&drag.changed){
+   if(drag.mesh){drag.mesh.position.copy(drag.position);drag.mesh.updateMatrixWorld(true);}
+   else{grid.layouts.set(drag.index,drag.layout);updateGridArt(true);}
+   grid.ver++;visualKey='';
+  }else if(drag.changed){
+   if(drag.mesh)e.mark([drag.mesh]);
+   setGridStatus('Moved a piece in this variation. Lock the variation to keep it during MIX.');
+  }
+ }
+ for(const type of ['pointerup','pointercancel','lostpointercapture'])viewport.addEventListener(type,endPieceDrag);
+  function updateLockButton(){
   lockButton.hidden=lockButton.disabled=!isolated||!grid?.layouts.has(isolated);
   lockButton.textContent=grid?.locked.has(isolated)?'Unlock variation':'Lock variation';
  }
@@ -229,7 +294,8 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  };
  function isolateCell(index){
 
-  isolated=index;refreshOutlines();updateLockButton();
+  selectedPiece=null;
+  isolated=index;updateGridArt(true);refreshOutlines();updateLockButton();
   if(index)e.select([]);
   e.fit(cellBounds(index),true);
   setGridStatus('Isolated row '+(Math.floor(index/grid.columns)+1)+', column '+(index%grid.columns+1)+'. Use arrow keys to browse.');
@@ -403,9 +469,57 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
     outline.append(handle);
    }
   }
-  group.prepend(outline);
+  group.append(outline);
  }
- const criteria=[...ranking.querySelectorAll('[name=ranking-criterion]')];
+ const continuitySection=ranking.querySelector('.program-continuity');
+ const firstPair=continuitySection.querySelector('.spec-distance-pair');
+ for(let i=1;i<3;i++)firstPair.after(firstPair.cloneNode(true));
+ const continuityRows=[...continuitySection.querySelectorAll('.spec-distance-pair')].map((row,i)=>{
+  row.classList.add('continuity-pair');
+  const enabled=document.createElement('input');
+  enabled.type='checkbox';enabled.checked=true;enabled.className='continuity-enabled';
+  enabled.setAttribute('aria-label','Enable continuity pair '+(i+1));
+  row.prepend(enabled);
+  const selects=[...row.querySelectorAll('select')];
+  selects[0].setAttribute('aria-label','First program, pair '+(i+1));
+  selects[1].setAttribute('aria-label','Second program, pair '+(i+1));
+  return selects;
+ });
+ const continuityChecks=[...continuitySection.querySelectorAll('.continuity-enabled')];
+ const continuityButton=ranking.querySelector('.continuity-select');
+ continuitySection.querySelector('p').textContent='Select variations satisfying every checked pair. Boundaries must touch or be within 1 ft.';
+ let continuityKey='';
+ function refreshPrograms(preferred){
+  const names=[...new Set((grid?.seed.parts||[]).map(part=>part.program?.trim()).filter(Boolean))].sort();
+  const key=JSON.stringify(names);
+  if(key===continuityKey&&!preferred)return;
+  continuityKey=key;
+  const values=typeof preferred?.[0]==='string'?[preferred]:preferred;
+  for(const [i,row] of continuityRows.entries())for(const [j,select] of row.entries()){
+   const previous=values?.[i]?.[j]??select.value;
+   select.replaceChildren(new Option('Choose program',''),...names.map(name=>new Option(name,name)));
+   if(names.includes(previous))select.value=previous;
+  }
+ }
+ const programPairs=()=>continuityRows.filter((_,i)=>continuityChecks[i].checked).map(row=>row.map(select=>select.value)).filter(([a,b])=>a&&b&&a!==b);
+ const validPairs=()=>continuityRows.every(([a,b],i)=>!continuityChecks[i].checked||(!a.value&&!b.value)||(a.value&&b.value&&a.value!==b.value));
+ for(const input of [...continuityRows.flat(),...continuityChecks])input.onchange=clearRanking;
+ continuityButton.onclick=()=>{
+  if(!grid?.mixed)return setGridStatus('Run MIX to generate variations first.');
+  const pairs=programPairs();
+  if(!pairs.length||!validPairs())return setGridStatus('Complete each chosen pair with two different programs.');
+  fitGrid();
+  let reviewed=0;
+  for(const [index,layout] of grid.layouts){
+   if(grid.deleted.has(index)||grid.locked.has(index))continue;
+   reviewed++;
+   if(pairs.every(([a,b])=>programBoundaryGap(grid.seed.parts,layout,a,b)<=foot+1e-7))ranked.add(index);
+  }
+  keep.disabled=discard.disabled=!ranked.size;
+  visualKey='';
+  setGridStatus('Selected '+ranked.size+' of '+reviewed+' variations satisfying '+pairs.length+' program '+(pairs.length===1?'pair.':'pairs.'));
+ };
+  const criteria=[...ranking.querySelectorAll('[name=ranking-criterion]')];
  const keep=ranking.querySelector('.rank-keep'),discard=ranking.querySelector('.rank-delete');
  function clearRanking(){
   ranked.clear();keep.disabled=discard.disabled=true;visualKey='';
@@ -447,7 +561,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   switch(criterion){
    case 'Separation':return separationScore(layout);
    case 'Overlapping':return mean(gaps.map(gap=>Math.max(0,-gap)));
-   case 'Continuity':return -mean(gaps.map(Math.abs));
+   case 'Continuity':return programPairs().length?-Math.max(...programPairs().map(([a,b])=>programBoundaryGap(grid.seed.parts,layout,a,b))):-mean(gaps.map(Math.abs));
    case 'Rhythm':return Math.max(...gaps)-Math.min(...gaps);
    case 'Centrality':{
     const x=mean(layout.map(point=>point[0]));
@@ -490,7 +604,8 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  };
   function fitGrid(){
   if(!isolationActive||!grid)return false;
-  isolated=null;refreshOutlines();updateLockButton();clearRanking();
+  selectedPiece=null;
+  isolated=null;updateGridArt(true);refreshOutlines();updateLockButton();clearRanking();
   e.fit(gridBounds(),true);setGridStatus('Showing the full grid.');
   return true;
  }
@@ -597,10 +712,13 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   if(!grid?.placed)createGrid(true);
   if(!grid?.placed)return;
   grid.settings=['overlap','centrality','rhythm'].map(key=>mix.querySelector('.mix-'+key).valueAsNumber/100);
+  const kept=grid.locked.size;
+  grid.deleted.clear();
   clearRanking();
   grid.mixed=true;grid.ver++;
   updateGridArt();
-  mixStatus.textContent='Generated '+(grid.columns*grid.rows-1)+' variations. The top-left cell holds the original.';
+  fitGrid();
+  mixStatus.textContent='Generated '+(grid.columns*grid.rows-1-kept)+' variations. Kept '+kept+' locked variations and the original.';
  };
  let gridArt=null;
  function colorVariation(cell,locked){
@@ -673,16 +791,33 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
      const [x,y,angle]=layout[i]??(layout[i]=[xMix,yMix,T.MathUtils.lerp(looseAngle,nextAngle,overlapBlend)]);
      const use=svg('use');use.setAttribute('href','#'+id);use.dataset.variationPiece='';
      use.setAttribute('transform','translate('+x+','+y+') rotate('+angle+') translate('+(-ox)+','+(-oy)+')');
+     const selected=isolated===index&&selectedPiece?.index===index&&selectedPiece.part===i;
+     if(selected){
+      use.style.setProperty('--variation-stroke','#dc24f4');
+      use.style.setProperty('--variation-fill','#dc24f450');
+      use.style.strokeWidth='2.5';
+     }
+     use.dataset.selectedPiece=String(selected);
      group.append(use);
      if(space){
       const radians=angle*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
       const dx=space.x-center.x,dy=space.y-center.y;
       const label=fittedTitle(program,space.radius,cell*.035);
+      if(selected)label.style.fill='#dc24f4';
       label.setAttribute('transform','translate('+(x+c*dx-s*dy)+','+(y+s*dx+c*dy)+') scale(1,-1)');
       group.append(label);
      }
     }
     grid.layouts.set(index,layout);
+    if(isolated===index){
+     for(const [i,{id,center}] of parts.entries()){
+      const [x,y,angle]=layout[i],ox=center.x-seed.center.x,oy=center.y-seed.center.y;
+      const hitGroup=svg('g');
+      hitGroup.setAttribute('transform','translate('+x+','+y+') rotate('+angle+') translate('+(-ox)+','+(-oy)+')');
+      pieceHits(hitGroup,defs.querySelector('#'+id).getAttribute('d'),index,i);
+      group.append(hitGroup);
+     }
+    }
    }
   }
   gridArt=art;visualKey='';
@@ -691,7 +826,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  function redraw(showGrid){
   const meshes=iterationMeshes().filter(allowsMesh),selectedSet=new Set(selected()),camera=e.camera,w=viewport.clientWidth,h=viewport.clientHeight;
   for(const mesh of meshes)mesh.updateWorldMatrix(true,false);
-  const key=JSON.stringify([w,h,camera.projectionMatrix.elements,camera.matrixWorld.elements,showGrid?grid?.ver:null,isolated,meshes.map(m=>[m.uuid,m.geometry.uuid,m.userData.program,m.matrixWorld.elements,selectedSet.has(m)])]);
+  const key=JSON.stringify([selectedPiece,w,h,camera.projectionMatrix.elements,camera.matrixWorld.elements,showGrid?grid?.ver:null,isolated,meshes.map(m=>[m.uuid,m.geometry.uuid,m.userData.program,m.matrixWorld.elements,selectedSet.has(m)])]);
   if(key===visualKey)return;
   visualKey=key;overlay.replaceChildren();projectedRegions=[];
   if(!w||!h)return;
@@ -717,7 +852,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
     if(outlined&&!outline)drawVariationOutline(index,cell);
     if(!outlined)outline?.remove();
     const dimPieces=Boolean(cell.querySelector('[data-variation-outline]'));
-    for(const piece of cell.querySelectorAll('[data-variation-piece]'))piece.style.opacity=dimPieces?'0.28':'';
+    for(const piece of cell.querySelectorAll('[data-variation-piece]'))piece.style.opacity=piece.dataset.selectedPiece==='true'?'1':dimPieces?'0.28':'';
    }
    gridArt.querySelector(':scope > path').style.display=isolated===null?'':'none';
    overlay.append(gridArt);
@@ -725,17 +860,24 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   }
   for(const mesh of meshes){
    const focused=selectedSet.has(mesh),label=mesh.userData.program;
-   if(!focused&&!label)continue;
+   const selectedOriginal=isolationActive&&isolated===0&&selectedPiece?.index===0&&grid.seed.meshes[selectedPiece.part]===mesh;
+   if(!focused&&!label&&!(isolationActive&&isolated===0&&grid.seed.meshes.includes(mesh)))continue;
    const paths=pathsOf(mesh).map(({points,closed})=>({points:points.map(([x,y])=>point(x,y,mesh.matrixWorld)),closed}));
    if(label){
     const closed=paths.filter(p=>p.closed);
-    if(closed.length){path(closed.map(p=>command(p.points)+' Z').join(' '),'none',0,'#21e0ed28');projectedRegions.push({mesh,paths:closed});}
+    if(closed.length){path(closed.map(p=>command(p.points)+' Z').join(' '),'none',0,selectedOriginal?'#dc24f450':'#21e0ed28');projectedRegions.push({mesh,paths:closed});}
     const space=labelSpace(closed);
     if(space){
      const text=fittedTitle(label,space.radius,12);
+     if(selectedOriginal)text.style.fill='#dc24f4';
      text.setAttribute('x',space.x);text.setAttribute('y',space.y);
      overlay.append(text);
     }
+   }
+   if(isolationActive&&isolated===0&&grid.seed.meshes.includes(mesh)){
+    const part=grid.seed.meshes.indexOf(mesh);
+    pieceHits(overlay,paths.map(p=>command(p.points)+(p.closed?' Z':'')).join(' '),0,part,mesh);
+    if(selectedPiece?.index===0&&selectedPiece.part===part)path(paths.map(p=>command(p.points)+(p.closed?' Z':'')).join(' '),'#dc24f4',2.5);
    }
    if(focused&&paths.length)path(paths.map(p=>command(p.points)+(p.closed?' Z':'')).join(' '),cyan,2.5);
   }
@@ -747,7 +889,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  });
  function saveKey(){
   return [grid?.ver,isolated,[...(grid?.locked||[])],[...(grid?.deleted||[])],[...ranked],cornerState(filletsByLayout),
-   mixInputs.map(input=>input.value),titles.checked,showOutlines,showPoints,criteria.map(input=>input.checked),cornerState(restoredByLayout)];
+   mixInputs.map(input=>input.value),titles.checked,showOutlines,showPoints,criteria.map(input=>input.checked),cornerState(restoredByLayout),continuityRows.map(row=>row.map(select=>select.value)),continuityChecks.map(input=>input.checked)];
  }
  function saveState(){
   const state={key:saveKey(),status:mixStatus.textContent};
@@ -760,7 +902,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  function restoreState(state){
   if(!state?.key)return;
   grid=null;gridArt=null;isolated=null;clearRanking();
-  const [,cell,, ,results,fillets,values,showTitles,outlines,points,checked,restored=[]]=state.key;
+  const [,cell,, ,results,fillets,values,showTitles,outlines,points,checked,restored=[],continuity=[],continuityEnabled=[]]=state.key;
   mixInputs.forEach((input,i)=>{if(values[i]!=null)input.value=values[i];});
   criteria.forEach((input,i)=>{input.checked=Boolean(checked[i]);});
   titles.checked=showTitles;
@@ -788,6 +930,8 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
     updateLockButton();updateGridArt(true);
    }
   }
+  refreshPrograms(continuity);
+  continuityChecks.forEach((input,i)=>{input.checked=continuityEnabled[i]??true;});
   updateLockButton();
   if(state.status)setGridStatus(state.status);
  }
@@ -977,6 +1121,8 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  }
    return {allowsMesh,inWorkspace,fitGrid,saveKey,saveState,restoreState,
   update(active,showMix){
+   refreshPrograms();
+   continuityButton.disabled=!grid?.mixed||!programPairs().length||!validPairs();
    updateSavePanel();
    const wasMix=isolationActive;
    isolationActive=active&&showMix;
