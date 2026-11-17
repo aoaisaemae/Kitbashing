@@ -1,7 +1,7 @@
 import * as T from './three.js';
 export function installWorkflow(e){
- const {$}=e,names=['figures','project','floor-plates'];let active='figures',worker=null,rejectJob=null,job=0,lastUI='',message='Arrange your source figures, then build a closed Project mesh.';
- const tabs=document.createElement('nav');tabs.className='viewport-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Modeling stages');for(const name of names){const b=document.createElement('button');b.id='viewport'+name[0].toUpperCase()+name.slice(1);b.textContent=name==='project'?'Program':name==='floor-plates'?'Floor plates':'Figures';b.dataset.stage=name;b.setAttribute('role','tab');b.onclick=()=>switchTo(name==='project'?'resolution':name);tabs.append(b);}$('.canvas-head').before(tabs);
+ const {$}=e,names=['figures','project','iterations','floor-plates'];let active='figures',worker=null,rejectJob=null,job=0,lastUI='',message='Arrange your source figures, then build a closed Project mesh.';
+ const tabs=document.createElement('nav');tabs.className='viewport-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Modeling stages');for(const name of names){const b=document.createElement('button');b.id='viewport'+name[0].toUpperCase()+name.slice(1);b.textContent=name==='project'?'Program':name==='floor-plates'?'Floor plates':name==='iterations'?'Iterations':'Figures';b.dataset.stage=name;b.setAttribute('role','tab');b.onclick=()=>switchTo(name==='project'?'resolution':name);tabs.append(b);}$('.canvas-head').before(tabs);
  const bar=document.createElement('section');bar.className='workflow-bar';bar.innerHTML='<div class="workflow-actions"><button id="buildProject">Build Project from Figures</button><button id="sendResolution">Edit resolution →</button><button id="cancelWorkflow" hidden>Cancel</button></div><p id="workflowStatus" role="status"></p>';
  $('.alignment-strip').after(bar);
  const stageOf=m=>m.userData.workspaceStage||'figures',inStage=(m,stage=active)=>!e.pieces().includes(m)||(stage==='resolution'?['figures','program-outline'].includes(stageOf(m)):stageOf(m)===stage),stagePieces=(stage=active)=>e.pieces().filter(m=>inStage(m,stage));
@@ -20,7 +20,7 @@ export function installWorkflow(e){
   $('#buildProject').hidden=active==='resolution';$('#buildProject').textContent=active==='figures'?'Build Project from Figures':'Update Project from Figures';$('#sendResolution').hidden=true;
   for(const b of bar.querySelectorAll('button:not(#cancelWorkflow)'))b.disabled=e.isBusy();$('#cancelWorkflow').hidden=!worker;
   $('#workflowStatus').textContent=active==='resolution'?'':message;
-  bar.hidden=['resolution','floor-plates'].includes(active);
+  bar.hidden=['resolution','iterations','floor-plates'].includes(active);
  }
  async function switchTo(name){if(!names.includes(name)&&name!=='resolution')return;
   if(e.isBusy()||e.split()?.active)return e.say('Finish or cancel the current operation first.');if(name===active)return;
