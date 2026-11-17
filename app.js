@@ -1,6 +1,6 @@
 import {installSharedLibrary} from './shared-library.js?v=add-all';
 import {installFolderLibrary} from './folder-library.js';
-import {installResolutionTools} from './resolution-tools.js?v=matrix-save';
+import {installResolutionTools} from './resolution-tools.js?v=floor-workspace-save';
 import {installProjectMass} from './project-mass.js';
 import {installViewportControls} from './viewport-controls.js';
 import {installWorkflow} from './workflow-tabs.js?v=iteration-mix';
@@ -44,9 +44,9 @@ const transform=new TransformControls(camera,renderer.domElement);scene.add(tran
 scene.add(new T.HemisphereLight(0xd6f5ff,0x333045,2.6));const light=new T.DirectionalLight(0xffffff,3);light.position.set(60,100,80);scene.add(light);const rim=new T.DirectionalLight(0xdc24f4,2);rim.position.set(-80,20,-60);scene.add(rim);
 const grid=new T.GridHelper(600,60,0x33434b,0x1c252d);grid.position.y=-.15;scene.add(grid);
 const observer=new ResizeObserver(()=>{renderer.setSize(view.clientWidth,view.clientHeight);camera.aspect=view.clientWidth/view.clientHeight;camera.updateProjectionMatrix();});observer.observe(view);
-renderer.setAnimationLoop(()=>{orbit.update();layerTools?.update();splitTools?.update();workflowTools?.update();cadTools?.update();viewTools?.update();massTools?.update();resolutionTools?.update();layoutTools?.update();selectionOutlines.forEach(({mesh,halo})=>{mesh.updateMatrixWorld(true);halo.geometry=mesh.geometry;halo.matrix.copy(mesh.matrixWorld);halo.matrixWorldNeedsUpdate=true;halo.visible=isVisible(mesh)&&resolutionTools?.allowsMesh(mesh)!==false;halo.material.clippingPlanes=mesh.material.clippingPlanes;});transform.camera=displayCamera();const hidden=pieces.filter(mesh=>mesh.visible&&resolutionTools?.allowsMesh(mesh)===false);
+renderer.setAnimationLoop(()=>{orbit.update();layerTools?.update();splitTools?.update();workflowTools?.update();cadTools?.update();viewTools?.update();massTools?.update();resolutionTools?.update();selectionOutlines.forEach(({mesh,halo})=>{mesh.updateMatrixWorld(true);halo.geometry=mesh.geometry;halo.matrix.copy(mesh.matrixWorld);halo.matrixWorldNeedsUpdate=true;halo.visible=isVisible(mesh)&&resolutionTools?.allowsMesh(mesh)!==false;halo.material.clippingPlanes=mesh.material.clippingPlanes;});const hidden=pieces.filter(mesh=>mesh.visible&&resolutionTools?.allowsMesh(mesh)===false);
  for(const mesh of hidden)mesh.visible=false;
- try{renderer.render(scene,transform.camera);}finally{for(const mesh of hidden)mesh.visible=true;}});
+ try{layoutTools?.update();transform.camera=displayCamera();renderer.render(scene,transform.camera);}finally{for(const mesh of hidden)mesh.visible=true;}});
 function say(s){$('#toast').textContent=s;$('#toast').style.display='block';clearTimeout(say.timer);say.timer=setTimeout(()=>$('#toast').style.display='none',5500);$('#status').textContent=s;}
 function material(i){return new T.MeshStandardMaterial({color:colors[i%3],metalness:.28,roughness:.36,wireframe:false});}
 function updateInputs(){for(const el of document.querySelectorAll('[data-prop]')){const p=el.dataset.prop,a=el.dataset.axis;el.disabled=!selected||![...selection].every(canEdit);el.value=selected?(p==='rotation'?T.MathUtils.radToDeg(selected[p][a]):p==='position'?selected[p][a]/unitsPerFoot:selected[p][a]).toFixed(p==='position'?4:2):p==='scale'?'1.00':'0.00';}}
