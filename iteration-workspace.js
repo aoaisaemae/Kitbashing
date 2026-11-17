@@ -1,3 +1,4 @@
+import {downloadMatrix,illustratorMatrix,rhinoMatrix} from './matrix-files.js';
 import * as T from './three.js';
 import {traceMask,simplifyContour} from './composition-outline.js';
 
@@ -58,7 +59,7 @@ function labelSpace(paths){
  }
  return best;
 }
-export function installIterationWorkspace(e,curves,mix,ranking,store){
+export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  const controls=document.createElement('section');controls.className='iteration-editor';
  controls.innerHTML='<h3>Assign program</h3><label>Program name <input class="iteration-program" type="text" maxlength="80"></label><label>Floor <select class="iteration-floor"></select></label><h3>Square footage</h3><label>Target area (ft²) <input class="iteration-target" type="number" min="0" step="any"></label><p class="hint" aria-live="polite"></p><label>Iteration name <input class="iteration-group-name" type="text" maxlength="80"></label><button type="button">Save</button><p class="hint" role="status"></p>';
  curves.append(controls);
@@ -145,7 +146,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,store){
  };
  async function refreshSaved(preferred=picker.value){
   try{
-   saved=(await store.list()).filter(item=>Array.isArray(item.members)).sort((a,b)=>(b.savedAt||0)-(a.savedAt||0));
+   saved=(await store.list()).filter(item=>Array.isArray(item.members)&&!item.kind).sort((a,b)=>(b.savedAt||0)-(a.savedAt||0));
    picker.replaceChildren();
    for(const item of saved)picker.add(new Option(item.name,item.id));
    if(saved.some(item=>item.id===preferred))picker.value=preferred;
@@ -806,6 +807,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,store){
  }
  function restoreState(state){
   if(!state?.key)return;
+  grid=null;gridArt=null;isolated=null;clearRanking();
   const [,cell,, ,results,fillets,values,showTitles,outlines,points,checked,restored=[]]=state.key;
   mixInputs.forEach((input,i)=>{if(values[i]!=null)input.value=values[i];});
   criteria.forEach((input,i)=>{input.checked=Boolean(checked[i]);});
@@ -834,10 +836,196 @@ export function installIterationWorkspace(e,curves,mix,ranking,store){
     updateLockButton();updateGridArt(true);
    }
   }
+  updateLockButton();
   if(state.status)setGridStatus(state.status);
  }
-  return {allowsMesh,inWorkspace,fitGrid,saveKey,saveState,restoreState,
+ function matrixCell(index,local=false){
+  const bounds=cellBounds(index),center=bounds.getCenter(new T.Vector3());
+  const label='Row '+(Math.floor(index/grid.columns)+1)+' · Column '+(index%grid.columns+1);
+  const kinds={kind:'Pieces',color:grid.locked.has(index)?[.72,.05,.74]:undefined};
+  const fromPoint=([x,y])=>local?[x-center.x,y-center.y]:[x,y];
+  if(index===0){
+   return grid.seed.meshes.filter(mesh=>e.pieces().includes(mesh)).flatMap(mesh=>{
+    mesh.updateMatrixWorld(true);
+    return pathsOf(mesh).map(({points,closed})=>({
+     ...kinds,closed,name:mesh.userData.program||mesh.name,program:mesh.userData.program||'',
+     points:points.map(([x,y])=>fromPoint(new T.Vector3(x,y,0).applyMatrix4(mesh.matrixWorld).toArray()))
+    }));
+   });
+  }
+  const layout=grid.layouts.get(index);
+  if(!layout)return [];
+  return grid.seed.parts.flatMap(({paths,center},i)=>{
+   const [x,y,degrees]=layout[i],radians=degrees*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
+   const program=grid.seed.parts[i].program||'';
+   return paths.map(({points,closed})=>({
+    ...kinds,closed,program,name:program||label,
+    points:points.map(([px,py])=>{
+     const dx=px-center.x,dy=py-center.y;
+     return fromPoint([x+c*dx-s*dy,y+s*dx+c*dy]);
+    })
+   }));
+  });
+ }
+ function matrixCellOutline(index,local=false){
+  if(!index||!showOutlines)return null;
+  const group=document.createElementNS(ns,'g');
+  drawVariationOutline(index,group);
+  const path=group.querySelector('path');
+  if(!path)return null;
+  const length=path.getTotalLength();
+  if(!(length>0))return null;
+  const count=Math.max(24,Math.min(768,Math.ceil(length/grid.cell*90)));
+  const center=local?cellBounds(index).getCenter(new T.Vector3()):new T.Vector3();
+  const points=Array.from({length:count},(_,i)=>{
+   const point=path.getPointAtLength(length*i/count);
+   return [point.x-center.x,point.y-center.y];
+  });
+  return {kind:'Outline',closed:true,points,name:'Matrix outline',color:grid.locked.has(index)?[.72,.05,.74]:undefined};
+ }
+  function matrixCurves(){
+  const bounds=gridBounds(),{min,max}=bounds,curves=[];
+  for(let column=0;column<=grid.columns;column++){
+   const x=min.x+column*grid.cell;curves.push({kind:'Grid',points:[[x,min.y],[x,max.y]]});
+  }
+  for(let row=0;row<=grid.rows;row++){
+   const y=max.y-row*grid.cell;curves.push({kind:'Grid',points:[[min.x,y],[max.x,y]]});
+  }
+  curves.push(...matrixCell(0));
+  for(const index of grid.layouts.keys()){
+   curves.push(...matrixCell(index));
+   const outline=matrixCellOutline(index);
+   if(outline)curves.push(outline);
+  }
+  return {bounds,curves:curves.filter(curve=>curve.points.length>=2)};
+ }
+ function packCell(index){
+  const outline=matrixCellOutline(index,true);
+  const curves=matrixCell(index,true);
+  if(outline)curves.push(outline);
+  return curves.flatMap(({points,closed,program,name})=>{
+   const segments=[];
+   for(let i=1;i<points.length;i++)segments.push(...points[i-1],0,...points[i],0);
+   if(closed&&points.length>2&&points[0].some((value,i)=>value!==points.at(-1)[i]))segments.push(...points.at(-1),0,...points[0],0);
+   return segments.length?[{name,program,positions:new Float32Array(segments)}]:[];
+  });
+ }
+ function saveMatrixSeed(){
+  return grid.seed.meshes.filter(mesh=>e.pieces().includes(mesh)).map(mesh=>({
+   name:mesh.name,program:mesh.userData.program,color:mesh.material.color.getHex(),
+   positions:mesh.geometry.attributes.position.array.slice(),position:mesh.position.toArray(),
+   rotation:mesh.quaternion.toArray(),scale:mesh.scale.toArray()
+  }));
+ }
+ function insertMatrix(record){
+  const state=structuredClone(record.state);
+  const oldSeed=grid?.seed.meshes||[];
+  e.checkpoint();
+  const group=crypto.randomUUID();
+  const matches=(a,b)=>a.length===b.length&&a.every((value,i)=>Math.abs(value-b[i])<1e-6);
+  const meshes=record.members.map((member,index)=>{
+   const existing=e.pieces().find(mesh=>mesh.studioId===state.grid.seed.meshIds[index]);
+   if(existing&&matches(member.position,existing.position.toArray())&&matches(member.rotation,existing.quaternion.toArray())&&
+    matches(member.scale,existing.scale.toArray())&&matches(member.positions,existing.geometry.attributes.position.array)&&
+    existing.name===member.name&&existing.userData.program===member.program&&existing.material.color.getHex()===member.color)return existing;
+   const geometry=new T.BufferGeometry();
+   geometry.setAttribute('position',new T.BufferAttribute(member.positions.slice(),3));
+   geometry.computeBoundingBox();
+   const mesh=e.add({geometry,name:member.name,curve:true,offset:new T.Vector3().fromArray(member.position),stage:'iterations'});
+   geometry.dispose();
+   mesh.quaternion.fromArray(member.rotation);mesh.scale.fromArray(member.scale);mesh.material.color.setHex(member.color);
+   Object.assign(mesh.userData,{groupId:group,savedIterationId:record.id,matrixSeed:true,program:member.program});
+   return mesh;
+  });
+  for(const mesh of oldSeed){
+   if(meshes.includes(mesh)||!mesh.userData.matrixSeed||!e.canEdit(mesh)||!e.pieces().includes(mesh))continue;
+   e.pieces().splice(e.pieces().indexOf(mesh),1);mesh.removeFromParent();mesh.geometry.dispose();mesh.material.dispose();
+  }
+  grid=null;gridArt=null;isolated=null;clearRanking();
+  state.grid.seed.meshIds=meshes.map(mesh=>mesh.studioId);
+  state.grid.ver=Date.now();
+  restoreState(state);
+  e.select([]);e.mark(meshes);
+  e.fit(isolated===null?gridBounds():cellBounds(isolated),true);
+ }
+ savePanel.innerHTML='<div class="section iteration-editor"><h3>Matrix</h3><label>Matrix name <input class="matrix-name" type="text" maxlength="80"></label><button class="matrix-save" type="button">Save matrix</button><label>Saved matrices <select class="matrix-library"></select></label><button class="matrix-insert" type="button">Insert matrix</button><div class="button-pair"><button class="matrix-ai" type="button">Export Illustrator (.ai)</button><button class="matrix-rhino" type="button">Export Rhino (.3dm)</button></div><h3>Matrix iteration</h3><label>Grid cell <select class="matrix-cell"></select></label><label>Iteration name <input class="matrix-cell-name" type="text" maxlength="80"></label><button class="matrix-cell-save" type="button">Save matrix iteration</button><p class="hint" role="status"></p></div>';
+ const byClass=selector=>savePanel.querySelector(selector);
+ const matrixName=byClass('.matrix-name'),matrixLibrary=byClass('.matrix-library'),cellPicker=byClass('.matrix-cell');
+ const matrixStatus=savePanel.querySelector('[role=status]');
+ let matrices=[],savePanelOpen=false,savePanelKey='',fileBusy=false;
+ async function refreshMatrices(preferred=matrixLibrary.value){
+  matrices=(await store.list()).filter(item=>item.kind==='matrix').sort((a,b)=>b.savedAt-a.savedAt);
+  matrixLibrary.replaceChildren(...matrices.map(item=>new Option(item.name,item.id)));
+  if(matrices.some(item=>item.id===preferred))matrixLibrary.value=preferred;
+  if(!matrices.length)matrixLibrary.add(new Option('No saved matrices',''));
+  byClass('.matrix-insert').disabled=!matrixLibrary.value;
+ }
+ function reportMatrix(error){matrixStatus.textContent=error.message||String(error);}
+ byClass('.matrix-save').onclick=async()=>{
+  if(fileBusy||e.isBusy()||!grid)return;
+  const name=matrixName.value.trim();
+  if(!name){matrixName.focus();return reportMatrix('Enter a matrix name.');}
+  const members=saveMatrixSeed();
+  if(!members.length)return reportMatrix('Insert a source iteration before saving this matrix.');
+  fileBusy=true;
+  try{
+   const id=crypto.randomUUID();
+   await store.add({id,kind:'matrix',name,members,state:saveState(),savedAt:Date.now()});
+   await refreshMatrices(id);
+   matrixStatus.textContent='Saved '+name+'.';
+  }catch(error){reportMatrix(error);}finally{fileBusy=false;}
+ };
+ byClass('.matrix-insert').onclick=()=>{
+  const record=matrices.find(item=>item.id===matrixLibrary.value);
+  if(!record||fileBusy||e.isBusy())return;
+  try{insertMatrix(record);matrixName.value=record.name;matrixStatus.textContent='Inserted '+record.name+'.';}catch(error){reportMatrix(error);}
+ };
+ byClass('.matrix-cell-save').onclick=async()=>{
+  if(fileBusy||e.isBusy()||!grid||cellPicker.value==='')return;
+  const input=byClass('.matrix-cell-name'),name=input.value.trim();
+  if(!name){input.focus();return reportMatrix('Enter an iteration name.');}
+  const members=packCell(Number(cellPicker.value));
+  if(!members.length)return reportMatrix('Choose a cell that contains an iteration.');
+  fileBusy=true;
+  try{
+   await store.add({id:crypto.randomUUID(),kind:'matrix-cell',name,members,savedAt:Date.now()});
+   input.value='';matrixStatus.textContent='Saved '+name+' to Floor plates.';
+  }catch(error){reportMatrix(error);}finally{fileBusy=false;}
+ };
+ for(const [selector,extension] of [['.matrix-ai','ai'],['.matrix-rhino','3dm']]){
+  byClass(selector).onclick=async()=>{
+   if(fileBusy||e.isBusy()||!grid)return;
+   fileBusy=true;
+   try{
+    const {curves,bounds}=matrixCurves();
+    const filename=(matrixName.value.trim()||'popmarkit-matrix').replace(/[<>:"/\\|?*]/g,'-')+'.'+extension;
+    if(extension==='ai')downloadMatrix(illustratorMatrix(curves,bounds),filename,'application/pdf');
+    else downloadMatrix(await rhinoMatrix(curves),filename,'application/octet-stream');
+    matrixStatus.textContent='Exported '+filename+'.';
+   }catch(error){reportMatrix(error);}finally{fileBusy=false;}
+  };
+ }
+ function updateSavePanel(){
+  const open=!savePanel.hidden;
+  if(open&&!savePanelOpen)refreshMatrices().catch(reportMatrix);
+  savePanelOpen=open;
+  if(!open)return;
+  const ids=grid?[0,...grid.layouts.keys()]:[];
+  const key=ids.join(',')+'|'+isolated+'|'+(grid?.columns||0);
+  if(key!==savePanelKey){
+   savePanelKey=key;
+   const previous=cellPicker.value;
+   cellPicker.replaceChildren(...ids.map(index=>new Option(index===0?'Row 1 · Column 1 (original)':'Row '+(Math.floor(index/grid.columns)+1)+' · Column '+(index%grid.columns+1),String(index))));
+   if(!ids.length)cellPicker.add(new Option('Create a grid first',''));
+   else if(isolated!==null&&ids.includes(isolated))cellPicker.value=String(isolated);
+   else if(ids.includes(Number(previous)))cellPicker.value=previous||'0';
+  }
+  for(const selector of ['.matrix-save','.matrix-ai','.matrix-rhino','.matrix-cell-save'])byClass(selector).disabled=fileBusy||!grid;
+  byClass('.matrix-insert').disabled=fileBusy||!matrixLibrary.value;
+ }
+   return {allowsMesh,inWorkspace,fitGrid,saveKey,saveState,restoreState,
   update(active,showMix){
+   updateSavePanel();
    const wasMix=isolationActive;
    isolationActive=active&&showMix;
    lockAll.disabled=!grid?.layouts.size||grid.locked.size===grid.layouts.size;
@@ -876,3 +1064,4 @@ export function installIterationWorkspace(e,curves,mix,ranking,store){
   }
  };
 }
+
