@@ -1,7 +1,7 @@
-import {installFloorAssembly} from './floor-assembly.js';
+import {installFloorAssembly} from './floor-assembly.js?v=floor-workspace-save';
 import * as T from './three.js';
 import {installOutline} from './composition-outline.js';
-import {installIterationWorkspace} from './iteration-workspace.js?v=matrix-save';
+import {installIterationWorkspace} from './iteration-workspace.js?v=floor-workspace-save';
 
 export function installResolutionTools(e){
  const panel=document.createElement('aside'),constraints=document.createElement('aside');
@@ -13,11 +13,11 @@ export function installResolutionTools(e){
  panel.innerHTML='<div class="section"></div>';
  const outline=installOutline(e,panel.firstChild);
  let chosen='resolution',previousStage;
- const tabs=['01 / RESOLUTION','02 / CONSTRAINTS','01 / FLOOR PLATES','02 / PROPERTIES','03 / REALITY'].map((label,i)=>{
+ const tabs=['01 / RESOLUTION','02 / CONSTRAINTS','01 / FLOOR PLATES','02 / PROPERTIES','03 / REALITY','04 / SAVE'].map((label,i)=>{
   const button=document.createElement('button');
   button.textContent=label;
   button.hidden=true;
-  button.onclick=()=>{chosen=['resolution','constraints','floor','properties','reality'][i];};
+  button.onclick=()=>{chosen=['resolution','constraints','floor','properties','reality','floor-save'][i];};
   e.$('.panel-tabs').append(button);
   return button;
  });
@@ -47,12 +47,14 @@ export function installResolutionTools(e){
  const mix=document.createElement('aside');mix.className='resolution-panel';mix.hidden=true;e.$('.control-content').append(mix);
  const ranking=document.createElement('aside');ranking.className='resolution-panel';ranking.hidden=true;e.$('.control-content').append(ranking);
  const savePanel=document.createElement('aside');savePanel.className='resolution-panel';savePanel.hidden=true;e.$('.control-content').append(savePanel);
- const floors=installFloorAssembly(e,reality);
+ const floorSave=document.createElement('aside');
+ floorSave.className='resolution-panel';floorSave.hidden=true;e.$('.control-content').append(floorSave);
+ const floors=installFloorAssembly(e,reality,floorSave);
  const library=installIterations(e,panel.firstChild,floors);
  floors.setStore(library);
  floors.mount(panel.firstChild);
  const editor=installIterationWorkspace(e,panel.firstChild,mix,ranking,savePanel,library);
- return {pick:editor.pick,allowsMesh:editor.allowsMesh,inWorkspace:editor.inWorkspace,fitGrid:editor.fitGrid,
+ return {pick:editor.pick,allowsMesh:mesh=>editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:editor.inWorkspace,fitGrid:editor.fitGrid,
   saveKey:()=>[chosen,editor.saveKey(),floors.save()],
   saveState:()=>({chosen,editor:editor.saveState(),floors:floors.save()}),
   restoreState(state){
@@ -72,6 +74,7 @@ export function installResolutionTools(e){
   inspector.classList.toggle('floor-properties',floor);
   panel.firstChild.firstElementChild.hidden=!program;
   reality.hidden=!floor||chosen!=='reality';
+  floorSave.hidden=!floor||chosen!=='floor-save';
   ranking.hidden=!iterations||chosen!=='iteration-reality';
   mix.hidden=!iterations||chosen!=='mix';
   savePanel.hidden=!iterations||chosen!=='iteration-save';
@@ -82,11 +85,11 @@ export function installResolutionTools(e){
    if(iterationIndex>=0){button.hidden=!iterations;button.classList.toggle('active',iterations&&chosen===iterationPanels[iterationIndex]);continue;}
    const index=tabs.indexOf(button);
    button.hidden=iterations|| (index===-1?program||floor:index>=2?!floor:!program);
-   if(index>=0)button.classList.toggle('active',(index>=2?floor:program)&&chosen===['resolution','constraints','floor','properties','reality'][index]);
+   if(index>=0)button.classList.toggle('active',(index>=2?floor:program)&&chosen===['resolution','constraints','floor','properties','reality','floor-save'][index]);
   }
-  if(program||floor||iterations)for(const aside of e.$('.control-content').querySelectorAll(':scope > aside'))if(aside!==panel&&aside!==constraints&&aside!==reality&&aside!==mix&&aside!==ranking&&aside!==savePanel)aside.hidden=aside!==inspector||!showProperties;
+  if(program||floor||iterations)for(const aside of e.$('.control-content').querySelectorAll(':scope > aside'))if(aside!==panel&&aside!==constraints&&aside!==reality&&aside!==mix&&aside!==ranking&&aside!==savePanel&&aside!==floorSave)aside.hidden=aside!==inspector||!showProperties;
   library.update(program,floor,iterations);
-  floors.update(floor&&chosen==='floor',floor&&chosen==='reality');
+  floors.update(floor&&chosen==='floor',floor&&chosen==='reality',showProperties);
   editor.update(iterations,iterations&&['mix','iteration-reality','iteration-save'].includes(chosen));
  }};
 }
