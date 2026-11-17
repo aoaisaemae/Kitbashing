@@ -1,3 +1,4 @@
+import {addProgramText} from './rhino-program-text.js';
 export function downloadMatrix(content,name,type){
  const url=URL.createObjectURL(new Blob([content],{type}));
  const link=document.createElement('a');
@@ -37,7 +38,7 @@ export async function rhinoMatrix(curves){
  try{
   doc.settings().modelUnitSystem=rhino.UnitSystem.Millimeters;
   const layers=new Map();
-  for(const {points,closed,kind,name,color} of curves){
+  for(const {points,closed,kind,name,color,program} of curves){
    if(!layers.has(kind)){
     const layer=new rhino.Layer();
     try{layer.name=kind;layers.set(kind,doc.layers().add(layer));}finally{layer.delete();}
@@ -54,6 +55,7 @@ export async function rhinoMatrix(curves){
      attributes.colorSource=rhino.ObjectColorSource.ColorFromObject;
     }
     doc.objects().add(shape,attributes);
+    addProgramText(rhino,doc,program,xyz,attributes);
    }finally{shape.delete();attributes.delete();}
   }
   return doc.toByteArray();
