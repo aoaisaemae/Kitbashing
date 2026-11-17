@@ -1,6 +1,9 @@
-import {installFloorSpecs,planArea,planInterior,scaleFigure} from './floor-specs.js?v=floor-workspace-save';
+import {floorRhinoFile} from './floor-rhino.js';
+import {quadMesh} from './quad-mesh.js';
+import {downloadMatrix} from './matrix-files.js';
+import {installFloorSpecs,planArea,planInterior,scaleFigure} from './floor-specs.js?v=rhino-and-ghost-walls';
 import {traceCombinedContour} from './combined-contour.js';
-import {splitCurvePaths} from './iteration-workspace.js?v=floor-workspace-save';
+import {splitCurvePaths} from './iteration-workspace.js?v=rhino-and-ghost-walls';
 import * as T from './three.js';
 
 const foot=304.8;
@@ -38,6 +41,24 @@ export function stairGeometry(elevations){
  return geometry;
 }
 
+function restroomEnclosure(bounds){
+ const {min,max}=bounds,width=max.x-min.x,depth=max.z-min.z,height=max.y-min.y;
+ const thickness=Math.min(2*foot,width/4,depth/4);
+ const center=bounds.getCenter(new T.Vector3()),positions=[];
+ const wall=(w,d,x,z)=>{
+  const box=new T.BoxGeometry(w,height,d).translate(x,center.y,z),triangles=box.toNonIndexed();
+  for(const value of triangles.attributes.position.array)positions.push(value);
+  triangles.dispose();box.dispose();
+ };
+ wall(width,thickness,center.x,min.z+thickness/2);
+ wall(width,thickness,center.x,max.z-thickness/2);
+ wall(thickness,depth-2*thickness,min.x+thickness/2,center.z);
+ wall(thickness,depth-2*thickness,max.x-thickness/2,center.z);
+ const geometry=new T.BufferGeometry();
+ geometry.setAttribute('position',new T.Float32BufferAttribute(positions,3));
+ geometry.computeVertexNormals();geometry.computeBoundingBox();
+ return geometry;
+}
 export function installFloorAssembly(e,reality,savePanel){
  const section=document.createElement('section');
  section.className='iteration-editor';
@@ -51,7 +72,7 @@ export function installFloorAssembly(e,reality,savePanel){
   if(n<5)pair.add(new Option('Floor 0'+n+' – Floor 0'+(n+1),String(n-1)));
  }
  reality.firstChild.classList.add('iteration-editor');
- reality.firstChild.insertAdjacentHTML('beforeend','<h3>Stairs</h3><button class="spawn-egress" type="button">Spawn egress stairs · 20 ft × 8 ft</button><button class="stair-walls" type="button" aria-pressed="false">Walls</button><h3>Elevators</h3><label>Width (ft) <input class="elevator-width" type="number" min="1" max="40" step="0.25" value="8"></label><label>Depth (ft) <input class="elevator-depth" type="number" min="1" max="40" step="0.25" value="8"></label><button class="spawn-elevator" type="button">Spawn elevator</button><h3>Restrooms</h3><label>Size <select class="restroom-size"><option value="22">22 ft × 18 ft</option><option value="20">20 ft × 16 ft</option></select></label><label>Floor <select class="restroom-floor"></select></label><button class="spawn-restroom" type="button">Spawn restroom</button><label>Vertical circulation <select class="stair-picker"></select></label><div class="button-pair"><button class="stair-select" type="button">Select stairs</button><button class="stair-lock" type="button">Lock stairs</button></div><button class="snap-core" type="button">Snap to nearest core</button><p class="hint" role="status"></p>');
+ reality.firstChild.insertAdjacentHTML('beforeend','<h3>Stairs</h3><button class="spawn-egress" type="button">Spawn egress stairs · 20 ft × 8 ft</button><button class="stair-walls" type="button" aria-pressed="false">Walls</button><h3>Elevators</h3><label>Width (ft) <input class="elevator-width" type="number" min="1" max="40" step="0.25" value="8"></label><label>Depth (ft) <input class="elevator-depth" type="number" min="1" max="40" step="0.25" value="8"></label><button class="spawn-elevator" type="button">Spawn elevator</button><h3>Restrooms</h3><label>Size <select class="restroom-size"><option value="22">22 ft × 18 ft</option><option value="20">20 ft × 16 ft</option></select></label><label>Floor <select class="restroom-floor"></select></label><label class="ranking-option"><input class="stack-restrooms" type="checkbox" checked> Stack across floors</label><button class="spawn-restroom" type="button">Spawn restroom</button><label>Vertical circulation <select class="stair-picker"></select></label><div class="button-pair"><button class="stair-select" type="button">Select stairs</button><button class="stair-lock" type="button">Lock stairs</button></div><button class="snap-core" type="button">Snap to nearest core</button><p class="hint" role="status"></p>');
  const stairPicker=reality.querySelector('.stair-picker'),stairLock=reality.querySelector('.stair-lock'),stairSelect=reality.querySelector('.stair-select'),stairStatus=reality.querySelector('[role=status]');
  const floorMeshes=()=>e.pieces().filter(isPlate);
  const stairs=()=>e.pieces().filter(mesh=>mesh.userData.workspaceStage==='floor-plates'&&(mesh.userData.egressStair||mesh.userData.elevator));
@@ -114,7 +135,18 @@ export function installFloorAssembly(e,reality,savePanel){
  let wallsOn=false;
  function setWalls(on){wallsOn=on;wallsButton.setAttribute('aria-pressed',String(on));wallsButton.classList.toggle('active',on);}
  wallsButton.onclick=()=>setWalls(!wallsOn);
- function refreshWalls(){
+ function refreshRestrooms(){
+  for(const mesh of e.pieces().filter(mesh=>mesh.userData.restroom)){
+   if(!mesh.userData.restroomEnclosure){
+    if(!mesh.geometry.boundingBox)mesh.geometry.computeBoundingBox();
+    const geometry=restroomEnclosure(mesh.geometry.boundingBox);
+    mesh.geometry.dispose();mesh.geometry=geometry;
+    mesh.userData.restroomEnclosure=true;
+   }
+   mesh.material.transparent=true;mesh.material.opacity=.19;mesh.material.depthWrite=false;
+  }
+ }
+  function refreshWalls(){
   const live=stairs().filter(mesh=>mesh.userData.egressStair);
   for(const [mesh,wall] of walls){
    if(wallsOn&&live.includes(mesh)&&wall.source===mesh.geometry)continue;
@@ -167,7 +199,25 @@ export function installFloorAssembly(e,reality,savePanel){
  restroomButton.onclick=()=>{
   if(e.isBusy()||!restroomFloor.value)return;
   const width=Number(reality.querySelector('.restroom-size').value),depth=width-4;
-  stairStatus.textContent=placeFloorObject(new T.BoxGeometry(width*foot,8*foot,depth*foot).translate(0,4*foot,0),Number(restroomFloor.value),'restroom','Restroom');
+  const floor=Number(restroomFloor.value);
+  const geometry=new T.BoxGeometry(width*foot,8*foot,depth*foot).translate(0,4*foot,0);
+  if(!reality.querySelector('.stack-restrooms').checked){
+   stairStatus.textContent=placeFloorObject(geometry,floor,'restroom','Restroom');
+   return;
+  }
+  const floors=floorPlans(),plan=floors.get(floor);
+  const point=plan?.area>0?planInterior(plan.points):null;
+  if(!point){geometry.dispose();stairStatus.textContent='Place a closed floor outline first.';return;}
+  const groupId=crypto.randomUUID();
+  e.checkpoint();
+  const members=[];
+  for(const [n,{y}] of [...floors].sort((a,b)=>a[0]-b[0])){
+   const mesh=e.add({geometry,name:'Restroom stack · Floor 0'+n,offset:new T.Vector3(point[0],y,point[1]),stage:'floor-plates'});
+   Object.assign(mesh.userData,{restroom:true,floorLevel:n,groupId});
+   members.push(mesh);
+  }
+  geometry.dispose();e.select(members);e.mark(members);e.fit();
+  stairStatus.textContent='Stacked restrooms on '+members.length+' floors.';
  };
  const specs=installFloorSpecs(e,floorPlans,n=>placeFloorObject(scaleFigure(),n,'scalee','Scalee'));
  function gaps(){
@@ -333,7 +383,7 @@ export function installFloorAssembly(e,reality,savePanel){
   updateStairButtons();
   stairStatus.textContent=mesh.name+(mesh.userData.objectLocked?' locked.':' unlocked.');
  };
- savePanel.innerHTML='<div class="section iteration-editor"><h3>Save floor workspace</h3><label>Workspace name <input class="floor-workspace-name" type="text" maxlength="80"></label><button class="floor-workspace-save" type="button">Save workspace</button><label>Saved workspaces <select class="floor-workspace-library"></select></label><button class="floor-workspace-insert" type="button">Insert workspace</button><p class="hint">Inserting replaces the current Floor plates workspace. Undo restores the previous workspace.</p><p class="hint" role="status"></p></div>';
+ savePanel.innerHTML='<div class="section iteration-editor"><h3>Save floor workspace</h3><label>Workspace name <input class="floor-workspace-name" type="text" maxlength="80"></label><button class="floor-workspace-save" type="button">Save workspace</button><label>Saved workspaces <select class="floor-workspace-library"></select></label><button class="floor-workspace-insert" type="button">Insert workspace</button><button class="floor-rhino-export" type="button">Export everything to Rhino (.3dm)</button><p class="hint">Inserting replaces the current Floor plates workspace. Undo restores the previous workspace.</p><p class="hint" role="status"></p></div>';
  const workspaceName=savePanel.querySelector('.floor-workspace-name');
  const workspaceLibrary=savePanel.querySelector('.floor-workspace-library');
  const workspaceSave=savePanel.querySelector('.floor-workspace-save'),workspaceInsert=savePanel.querySelector('.floor-workspace-insert');
@@ -363,7 +413,7 @@ export function installFloorAssembly(e,reality,savePanel){
     const geometry=mesh.geometry.index?mesh.geometry.toNonIndexed():mesh.geometry;
     const positions=geometry.attributes.position.array.slice();
     if(geometry!==mesh.geometry)geometry.dispose();
-    return {name:mesh.name,positions,curve:mesh.isLine,color:mesh.material.color.getHex(),
+   return {name:mesh.name,positions,curve:mesh.isLine,color:mesh.material.color.getHex(),
      position:mesh.position.toArray(),rotation:mesh.quaternion.toArray(),scale:mesh.scale.toArray(),
      quadLayout:mesh.geometry.userData.quadLayout,data:structuredClone(mesh.userData)};
    });
@@ -406,16 +456,76 @@ export function installFloorAssembly(e,reality,savePanel){
   }catch(error){workspaceStatus.textContent=error.message;}
   finally{for(const {geometry} of prepared)geometry.dispose();}
  };
+ const rhinoExport=savePanel.querySelector('.floor-rhino-export');
+ let exporting=false;
+ function exportRecords(){
+  const records=[];
+  const category=mesh=>{
+   const data=mesh.userData;
+   if(data.egressStair||data.elevator)return 'Cores';
+   if(data.restroom)return 'Restrooms';
+   if(data.scalee)return 'Scale figures';
+   return 'Floor '+String(data.floorLevel||1).padStart(2,'0')+' - Pieces';
+  };
+  function collect(mesh,owner=mesh,layer=category(owner)){
+   mesh.updateWorldMatrix(true,false);
+   const base={name:mesh.name||owner.name,layer,color:mesh.material.color.getHex(),locked:e.locked(owner),
+    hidden:Boolean(owner.userData.objectHidden),opacity:mesh.material.transparent?mesh.material.opacity:1,program:owner.userData.program};
+   if(mesh.isLine){
+    for(const {points} of splitCurvePaths(mesh.geometry.attributes.position.array)){
+     if(points.length<2)continue;
+     records.push({...base,points:points.map(([x,y])=>new T.Vector3(x,y,0).applyMatrix4(mesh.matrixWorld).toArray())});
+    }
+   }else if(mesh.isMesh)records.push({...base,...quadMesh(mesh.geometry,mesh.matrixWorld)});
+  }
+  for(const mesh of workspacePieces()){
+   collect(mesh);
+   if(mesh.userData.egressStair&&wallsOn)for(const child of walls.get(mesh)?.group.children||[]){
+    collect(child,mesh,'Stair walls');
+   }
+  }
+  for(const [n,{points,y}] of floorPlans()){
+   if(points.length<3)continue;
+   const color=colorFor(n);
+   records.push({name:'Floor '+n+' combined outline',layer:'Floor '+String(n).padStart(2,'0')+' - Outline',color,
+    points:[...points,points[0]].map(([x,z])=>[x,y,z])});
+   const shape=new T.Shape(points.map(([x,z])=>new T.Vector2(x,-z)));
+   const geometry=new T.ShapeGeometry(shape).rotateX(-Math.PI/2).translate(0,y,0);
+   try{
+    records.push({name:'Floor '+n+' surface',layer:'Floor '+String(n).padStart(2,'0')+' - Surface',color,opacity:.14,
+     ...quadMesh(geometry,new T.Matrix4())});
+   }finally{geometry.dispose();}
+  }
+  return records;
+ }
+ async function exportRhino(){
+  if(exporting||e.isBusy())return;
+  if(!workspacePieces().length){workspaceStatus.textContent='Add floor plates or objects before exporting.';return;}
+  exporting=true;rhinoExport.disabled=true;
+  try{
+   refreshWalls();
+   refreshRestrooms();
+   const records=exportRecords();
+   const bytes=await floorRhinoFile(records);
+   const name=(workspaceName.value.trim()||'popmarkit-floor-workspace').replace(/[<>:"/\\|?*]/g,'-');
+   downloadMatrix(bytes,name+'.3dm','application/octet-stream');
+   workspaceStatus.textContent='Exported the floor workspace to Rhino.';
+   e.say('Floor workspace exported to Rhino.');
+  }catch(error){workspaceStatus.textContent='Rhino export failed: '+error.message;}
+  finally{exporting=false;rhinoExport.disabled=false;}
+ }
+ rhinoExport.onclick=exportRhino;
  function updateWorkspaceSave(){
   const open=!savePanel.hidden;
   if(open&&!saveOpen)refreshWorkspaces().catch(error=>{workspaceStatus.textContent=error.message;});
   saveOpen=open;
   if(!open)return;
+  rhinoExport.disabled=exporting||e.isBusy()||!workspacePieces().length;
   workspaceSave.disabled=workspaceBusy||e.isBusy()||!workspacePieces().length;
   workspaceInsert.disabled=workspaceBusy||e.isBusy()||!workspaceLibrary.value;
  }
-  return {
-  elevation,updateStairs,mount:parent=>parent.append(section),setStore:value=>{store=value;},
+ return {
+  exportRhino,elevation,updateStairs,mount:parent=>parent.append(section),setStore:value=>{store=value;},
   allowsMesh:mesh=>!combinedOnly||e.workflow().active!=='floor-plates'||!isPlate(mesh),
   save:workspaceSettings,restore:restoreSettings,
   update(active,showReality,showProperties){
@@ -423,6 +533,7 @@ export function installFloorAssembly(e,reality,savePanel){
    updateWorkspaceSave();
    updateOutlines();
    refreshWalls();
+   refreshRestrooms();
    specs.update(showProperties);
    if(active&&!previousFloor)refresh().catch(error=>{status.textContent=error.message;});
    previousFloor=active;

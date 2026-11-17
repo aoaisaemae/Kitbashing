@@ -1,7 +1,7 @@
-import {installFloorAssembly} from './floor-assembly.js?v=floor-workspace-save';
+import {installFloorAssembly} from './floor-assembly.js?v=rhino-and-ghost-walls';
 import * as T from './three.js';
 import {installOutline} from './composition-outline.js';
-import {installIterationWorkspace} from './iteration-workspace.js?v=floor-workspace-save';
+import {installIterationWorkspace} from './iteration-workspace.js?v=rhino-and-ghost-walls';
 
 export function installResolutionTools(e){
  const panel=document.createElement('aside'),constraints=document.createElement('aside');
@@ -54,7 +54,7 @@ export function installResolutionTools(e){
  floors.setStore(library);
  floors.mount(panel.firstChild);
  const editor=installIterationWorkspace(e,panel.firstChild,mix,ranking,savePanel,library);
- return {pick:editor.pick,allowsMesh:mesh=>editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:editor.inWorkspace,fitGrid:editor.fitGrid,
+ return {exportRhino:floors.exportRhino,pick:editor.pick,allowsMesh:mesh=>editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:editor.inWorkspace,fitGrid:editor.fitGrid,
   saveKey:()=>[chosen,editor.saveKey(),floors.save()],
   saveState:()=>({chosen,editor:editor.saveState(),floors:floors.save()}),
   restoreState(state){
@@ -103,8 +103,13 @@ function installIterations(e,parent,floors){
  importButton.type="button";importButton.textContent="Import curve";importButton.title="Import Rhino .3dm, SVG, or OBJ line curves";
  fileInput.type="file";fileInput.accept=".3dm,.svg,.obj";fileInput.hidden=true;
  section.lastElementChild.before(importButton,fileInput);section.lastElementChild.after(insertAll);
- importButton.onclick=()=>fileInput.click();
- const input=section.querySelector('input'),save=section.querySelector('button'),status=section.querySelector('[role=status]'),list=section.querySelector(':scope > div');
+ importButton.onclick=()=>{fileInput.accept='.3dm,.svg,.obj';fileInput.click();};
+ const rhinoImport=document.createElement('section');
+ rhinoImport.innerHTML='<h3>Input curve from Rhino</h3><button class="floor-rhino-import" type="button">Import Rhino curves (.3dm)</button>';
+ section.querySelectorAll('h3')[1].before(rhinoImport);
+ const rhinoButton=rhinoImport.querySelector('button');
+ rhinoButton.onclick=()=>{fileInput.accept='.3dm';fileInput.click();};
+ const input=section.querySelector('input'),save=section.querySelector(':scope > button'),status=section.querySelector('[role=status]'),list=section.querySelector(':scope > div');
  const selected=()=>e.selection().find(m=>m.userData.workspaceStage==='program-outline');
  const database=new Promise((resolve,reject)=>{
   const request=indexedDB.open('popmarkit-outline-iterations',1);
@@ -123,7 +128,7 @@ function installIterations(e,parent,floors){
  function report(error){status.textContent='Could not access saved iterations. '+(error?.message||'');}
  fileInput.onchange=async()=>{
   const file=fileInput.files[0];fileInput.value='';if(!file)return;
-  importButton.disabled=true;
+  importButton.disabled=rhinoButton.disabled=true;
   try{
    const curves=/\.3dm$/i.test(file.name)?await readRhinoCurves(file):[{name:file.name.replace(/\.[^.]+$/,''),positions:await readExternalCurve(file)}];
    const records=curves.map(curve=>({...curve,id:crypto.randomUUID(),curve:true,position:[0,0,0],rotation:[0,0,0,1],scale:[1,1,1],color:0x80ddff}));
@@ -133,7 +138,7 @@ function installIterations(e,parent,floors){
    });
    await load(records[0].id);status.textContent='Imported '+records.length+' '+(records.length===1?'curve':'curves')+'. Click Insert or Insert all to place curves.';
   }catch(error){status.textContent='Could not import curve. '+error.message;}
-  finally{importButton.disabled=false;}
+  finally{importButton.disabled=rhinoButton.disabled=false;}
  };
  async function load(selectedId){
   const items=(await access('readonly',store=>store.getAll())).filter(item=>!item.members);
@@ -249,10 +254,11 @@ function installIterations(e,parent,floors){
  };
  load().catch(report);
  return {add:item=>access('readwrite',store=>store.add(item)),list:()=>access('readonly',store=>store.getAll()),remove:id=>access('readwrite',store=>store.delete(id)),update(program,showFloor,iterations){
-  section.querySelectorAll('h3')[1].textContent=iterations?'Input curve':'Saved iterations';
+  section.querySelector(':scope > h3:nth-of-type(2)').textContent=iterations?'Input curve':'Saved iterations';
   section.firstElementChild.hidden=iterations||!program;
   const bulk=list.querySelector(".curve-bulk-delete");if(bulk)bulk.hidden=!iterations;
-  importButton.hidden=!iterations;insertAll.hidden=!iterations;
+  rhinoImport.hidden=!showFloor;
+  importButton.hidden=!iterations;insertAll.hidden=!(iterations||showFloor);
   section.querySelector('label').hidden=!program;
   save.hidden=!program;
   for(const label of list.querySelectorAll('.floor-assignment'))label.hidden=!showFloor;
