@@ -1,7 +1,7 @@
-import {installFloorAssembly} from './floor-assembly.js?v=rhino-and-ghost-walls';
+import {installFloorAssembly} from './floor-assembly.js?v=rhino-program-text';
 import * as T from './three.js';
 import {installOutline} from './composition-outline.js';
-import {installIterationWorkspace} from './iteration-workspace.js?v=rhino-and-ghost-walls';
+import {installIterationWorkspace} from './iteration-workspace.js?v=rhino-program-text';
 
 export function installResolutionTools(e){
  const panel=document.createElement('aside'),constraints=document.createElement('aside');
@@ -54,7 +54,7 @@ export function installResolutionTools(e){
  floors.setStore(library);
  floors.mount(panel.firstChild);
  const editor=installIterationWorkspace(e,panel.firstChild,mix,ranking,savePanel,library);
- return {exportRhino:floors.exportRhino,pick:editor.pick,allowsMesh:mesh=>editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:editor.inWorkspace,fitGrid:editor.fitGrid,
+ return {exportRhino:floors.exportRhino,pick:editor.pick,allowsMesh:mesh=>editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:mesh=>editor.inWorkspace(mesh)&&floors.inWorkspace(mesh),fitGrid:editor.fitGrid,
   saveKey:()=>[chosen,editor.saveKey(),floors.save()],
   saveState:()=>({chosen,editor:editor.saveState(),floors:floors.save()}),
   restoreState(state){

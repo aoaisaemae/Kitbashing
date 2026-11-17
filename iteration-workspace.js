@@ -1,5 +1,5 @@
-import {programBoundaryGap} from './program-continuity.js';
-import {downloadMatrix,illustratorMatrix,rhinoMatrix} from './matrix-files.js';
+import {programBoundaryGap} from './program-continuity.js?v=piece-rotate-scale';
+import {downloadMatrix,illustratorMatrix,rhinoMatrix} from './matrix-files.js?v=rhino-program-text';
 import * as T from './three.js';
 import {traceCombinedContour} from './combined-contour.js';
 
@@ -197,6 +197,23 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  const lockButton=mix.querySelector('.lock-variation');
  const showGridButton=mix.querySelector('.show-grid');
  ranking.innerHTML='<div class="section iteration-editor"><h3>Ranking</h3><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Separation"> Separation</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Overlapping"> Overlapping</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Continuity"> Continuity</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Rhythm"> Rhythm</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Centrality"> Centrality</label><section class="program-continuity"><h3>Program continuity</h3><div class="spec-distance-pair"><select class="continuity-from" aria-label="First program"></select><span>next to</span><select class="continuity-to" aria-label="Second program"></select></div><button class="continuity-select" type="button">Select adjacent programs</button><p class="hint">Select variations where these program boundaries touch or are within 1 ft.</p></section><button class="rank-select" type="button">Select</button><div class="button-pair"><button class="rank-keep" type="button" disabled>KEEP</button><button class="rank-delete" type="button" disabled>DELETE</button></div><div class="button-pair"><button class="rank-lock-all" type="button" disabled>Lock all</button><button class="rank-unlock-all" type="button" disabled>Unlock all</button></div><button class="rank-outline" type="button" aria-pressed="false">Draw Outline</button><button class="rank-points" type="button" aria-pressed="false">PointsOn</button><label>Outline detail <input class="rank-detail" type="range" min="0" max="100" value="100"></label><label>Curvature <input class="rank-curvature" type="range" min="0" max="100" value="50"></label><p class="hint">Drag pieces inside an isolated variation to move them. With PointsOn, double-click a corner to fillet it or an edge to restore a hidden point.</p><button class="rank-show-grid" type="button">Return to full grid</button><p class="hint" role="status"></p></div>';
+ const manualDelete=document.createElement('button');manualDelete.type='button';manualDelete.className='delete-isolated-iteration';manualDelete.textContent='Delete this iteration';manualDelete.disabled=true;
+ ranking.querySelector('.rank-show-grid').before(manualDelete);
+ manualDelete.onclick=()=>{
+  if(!grid||!isolated||grid.locked.has(isolated)||e.isBusy())return;
+  e.checkpoint();grid.deleted.add(isolated);grid.layouts.delete(isolated);grid.ver++;
+  fitGrid();setGridStatus('Deleted the isolated iteration. Undo restores it.');
+ };
+ viewport.addEventListener('click',event=>{
+  if(!isolationActive||isolated!==null||ranking.hidden||!grid?.mixed||event.button!==0||event.shiftKey||event.altKey||event.ctrlKey||event.metaKey||e.isBusy())return;
+  const point=pointerXY(event),row=Math.floor((grid.top-point.y)/grid.cell),column=Math.floor((point.x-grid.left)/grid.cell);
+  if(row<0||column<0||row>=grid.rows||column>=grid.columns)return;
+  const index=row*grid.columns+column;
+  if(!index||grid.deleted.has(index)||grid.locked.has(index)||!grid.layouts.has(index))return;
+  if(!ranked.delete(index))ranked.add(index);
+  keep.disabled=discard.disabled=!ranked.size;visualKey='';
+  setGridStatus('Selected '+ranked.size+' iterations. Click DELETE to remove them, or click a selected iteration to deselect it.');
+ });
  const rankingStatus=ranking.querySelector('[role=status]');
  const setGridStatus=message=>{mixStatus.textContent=rankingStatus.textContent=message;};
  function cellBounds(index){
@@ -217,20 +234,36 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   isolateCell(index);
  });
  let selectedPiece=null,pieceDrag=null;
+ let pieceMode='translate';
+ const pieceControls=document.createElement('section');pieceControls.className='piece-transform';
+ pieceControls.innerHTML='<h3>Edit isolated piece</h3><div class="button-pair"><button type="button" data-piece-mode="translate">Move (W)</button><button type="button" data-piece-mode="rotate">Rotate (E)</button><button type="button" data-piece-mode="scale">Scale (R)</button></div><p class="hint">Click a piece, then drag its workspace handles. Shift snaps rotation to 15° or scale to 10%. Drag the piece itself to move it.</p>';
+ ranking.querySelector('.rank-outline').before(pieceControls);
+ function updatePieceControls(){
+  pieceControls.hidden=!isolationActive||isolated===null;
+  for(const button of pieceControls.querySelectorAll('button'))button.setAttribute('aria-pressed',String(button.dataset.pieceMode===pieceMode));
+ }
+ for(const button of pieceControls.querySelectorAll('button'))button.onclick=()=>{pieceMode=button.dataset.pieceMode;visualKey='';updatePieceControls();};
+ document.addEventListener('keydown',event=>{
+  if(!isolationActive||!selectedPiece||isolated===null||event.ctrlKey||event.metaKey||event.altKey||event.target.closest?.('input,textarea,select,[contenteditable="true"]'))return;
+  const mode={w:'translate',e:'rotate',r:'scale'}[event.key.toLowerCase()];
+  if(!mode)return;event.preventDefault();event.stopImmediatePropagation();pieceMode=mode;visualKey='';updatePieceControls();
+ },true);
  function pointerXY(event){
   const bounds=viewport.getBoundingClientRect();
   return new T.Vector3((event.clientX-bounds.left)/bounds.width*2-1,1-(event.clientY-bounds.top)/bounds.height*2,0).unproject(e.camera);
  }
- function startPieceDrag(event,index,part,mesh=null){
+ function startPieceDrag(event,index,part,mesh=null,mode='translate'){
   if(event.button!==0||!isolationActive||isolated!==index||e.isBusy()||event.altKey||event.ctrlKey||event.metaKey)return;
   event.preventDefault();event.stopPropagation();
   if(grid.locked.has(index)||(mesh&&!e.canEdit(mesh))){
    setGridStatus('Unlock this variation before moving its pieces.');return;
   }
-  selectedPiece={index,part};
+  selectedPiece={index,part};updatePieceControls();
   updateGridArt(true);
   e.select([]);
-  pieceDrag={id:event.pointerId,index,part,mesh,start:pointerXY(event),layout:mesh?null:grid.layouts.get(index),
+  const center=mesh?new T.Box3().setFromObject(mesh).getCenter(new T.Vector3()):new T.Vector3(...grid.layouts.get(index)[part].slice(0,2),0);
+  pieceDrag={id:event.pointerId,index,part,mesh,mode:mode.startsWith('translate')?'translate':mode,axis:mode.split('-')[1],center,start:pointerXY(event),layout:mesh?null:grid.layouts.get(index),
+   rotation:mesh?.quaternion.clone(),scale:mesh?.scale.clone(),
    position:mesh?.position.clone(),orbit:e.orbit.enabled,transform:e.transform.enabled,changed:false};
   e.orbit.enabled=false;e.transform.enabled=false;
   viewport.setPointerCapture(event.pointerId);
@@ -250,16 +283,28 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   const drag=pieceDrag;
   if(!drag||drag.id!==event.pointerId)return;
   event.preventDefault();event.stopPropagation();
-  const delta=pointerXY(event).sub(drag.start);
+  const current=pointerXY(event),delta=current.clone().sub(drag.start);
+  if(drag.axis==='x')delta.y=0;if(drag.axis==='y')delta.x=0;
   if(!drag.changed&&delta.lengthSq()<1e-10)return;
   if(!drag.changed){e.checkpoint();drag.changed=true;}
+  const origin=drag.start.clone().sub(drag.center),now=current.clone().sub(drag.center);
+  let angle=Math.atan2(now.y,now.x)-Math.atan2(origin.y,origin.x);
+  let factor=Math.max(.01,Math.min(100,now.length()/Math.max(origin.length(),1e-8)));
+  if(event.shiftKey){angle=Math.round(angle/(Math.PI/12))*Math.PI/12;factor=Math.max(.1,Math.round(factor*10)/10);}
   if(drag.mesh){
-   drag.mesh.position.copy(drag.position).add(new T.Vector3(delta.x,delta.y,0));drag.mesh.updateMatrixWorld(true);
+   drag.mesh.position.copy(drag.position);drag.mesh.quaternion.copy(drag.rotation);drag.mesh.scale.copy(drag.scale);
+   if(drag.mode==='translate')drag.mesh.position.add(new T.Vector3(delta.x,delta.y,0));
+   else if(drag.mode==='rotate'){
+    const rotation=new T.Quaternion().setFromAxisAngle(new T.Vector3(0,0,1),angle);
+    drag.mesh.quaternion.premultiply(rotation);drag.mesh.position.sub(drag.center).applyQuaternion(rotation).add(drag.center);
+   }else{drag.mesh.scale.x*=factor;drag.mesh.scale.y*=factor;drag.mesh.position.sub(drag.center).multiplyScalar(factor).add(drag.center);}
+   drag.mesh.updateMatrixWorld(true);
   }else{
-   const layout=drag.layout.map(row=>[...row]);
-   layout[drag.part][0]+=delta.x;layout[drag.part][1]+=delta.y;
-   grid.layouts.set(drag.index,layout);
-   updateGridArt(true);
+   const layout=drag.layout.map(row=>[...row]),part=layout[drag.part];
+   if(drag.mode==='translate'){part[0]+=delta.x;part[1]+=delta.y;}
+   else if(drag.mode==='rotate')part[2]+=angle*180/Math.PI;
+   else part[3]=(part[3]??1)*factor;
+   grid.layouts.set(drag.index,layout);updateGridArt(true);
   }
   grid.ver++;visualKey='';
  });
@@ -271,16 +316,17 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   e.orbit.enabled=drag.orbit;e.transform.enabled=drag.transform;
   if(viewport.hasPointerCapture(event.pointerId))viewport.releasePointerCapture(event.pointerId);
   if(event.type!=='pointerup'&&drag.changed){
-   if(drag.mesh){drag.mesh.position.copy(drag.position);drag.mesh.updateMatrixWorld(true);}
+   if(drag.mesh){drag.mesh.position.copy(drag.position);drag.mesh.quaternion.copy(drag.rotation);drag.mesh.scale.copy(drag.scale);drag.mesh.updateMatrixWorld(true);}
    else{grid.layouts.set(drag.index,drag.layout);updateGridArt(true);}
    grid.ver++;visualKey='';
   }else if(drag.changed){
    if(drag.mesh)e.mark([drag.mesh]);
-   setGridStatus('Moved a piece in this variation. Lock the variation to keep it during MIX.');
+   setGridStatus('Edited a piece in this variation. Lock the variation to keep it during MIX.');
   }
  }
  for(const type of ['pointerup','pointercancel','lostpointercapture'])viewport.addEventListener(type,endPieceDrag);
   function updateLockButton(){
+  updatePieceControls();
   lockButton.hidden=lockButton.disabled=!isolated||!grid?.layouts.has(isolated);
   lockButton.textContent=grid?.locked.has(isolated)?'Unlock variation':'Lock variation';
  }
@@ -367,10 +413,10 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   const layout=grid.layouts.get(index);
   if(contoursByLayout.has(layout))return contoursByLayout.get(layout);
   const parts=grid.seed.parts.map(({paths,center},i)=>{
-   const [x,y,degrees]=layout[i];
+   const [x,y,degrees,scale=1]=layout[i];
    const angle=degrees*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
    return paths.map(({points,closed})=>({closed,points:points.map(([px,py])=>{
-    const dx=px-center.x,dy=py-center.y;
+    const dx=(px-center.x)*scale,dy=(py-center.y)*scale;
     return [x+c*dx-s*dy,y+s*dx+c*dy];
    })}));
   }).flat();
@@ -527,9 +573,9 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  for(const input of criteria)input.onchange=clearRanking;
  function separationScore(layout){
   const shapes=grid.seed.parts.map(({paths,center},i)=>{
-   const [x,y,degrees]=layout[i],angle=degrees*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
+   const [x,y,degrees,scale=1]=layout[i],angle=degrees*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
    return paths.map(({points,closed})=>({closed,points:points.map(([px,py])=>{
-    const dx=px-center.x,dy=py-center.y;
+    const dx=(px-center.x)*scale,dy=(py-center.y)*scale;
     return [x+c*dx-s*dy,y+s*dx+c*dy];
    })}));
   });
@@ -594,13 +640,15 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   clearRanking();updateLockButton();setGridStatus('Kept and locked '+count+' variations.');
  };
  discard.onclick=()=>{
+  if(!grid||!ranked.size||e.isBusy())return;
+  e.checkpoint();
   const count=ranked.size;
   for(const index of ranked){
    if(grid.locked.has(index))continue;
    grid.deleted.add(index);grid.layouts.delete(index);
    gridArt.querySelector('[data-cell="'+index+'"]')?.remove();
   }
-  clearRanking();fitGrid();setGridStatus('Deleted '+count+' variations.');
+  grid.ver++;clearRanking();fitGrid();setGridStatus('Deleted '+count+' variations. Undo restores them.');
  };
   function fitGrid(){
   if(!isolationActive||!grid)return false;
@@ -788,9 +836,9 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
      const overlapBlend=overlap*.72;
      const xMix=T.MathUtils.lerp(cx+cosTurn*looseX-sinTurn*looseY,nextX,overlapBlend);
      const yMix=T.MathUtils.lerp(cy+sinTurn*looseX+cosTurn*looseY,nextY,overlapBlend);
-     const [x,y,angle]=layout[i]??(layout[i]=[xMix,yMix,T.MathUtils.lerp(looseAngle,nextAngle,overlapBlend)]);
+     const [x,y,angle,scale=1]=layout[i]??(layout[i]=[xMix,yMix,T.MathUtils.lerp(looseAngle,nextAngle,overlapBlend)]);
      const use=svg('use');use.setAttribute('href','#'+id);use.dataset.variationPiece='';
-     use.setAttribute('transform','translate('+x+','+y+') rotate('+angle+') translate('+(-ox)+','+(-oy)+')');
+     use.setAttribute('transform','translate('+x+','+y+') rotate('+angle+') scale('+scale+') translate('+(-ox)+','+(-oy)+')');
      const selected=isolated===index&&selectedPiece?.index===index&&selectedPiece.part===i;
      if(selected){
       use.style.setProperty('--variation-stroke','#dc24f4');
@@ -801,8 +849,8 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
      group.append(use);
      if(space){
       const radians=angle*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
-      const dx=space.x-center.x,dy=space.y-center.y;
-      const label=fittedTitle(program,space.radius,cell*.035);
+      const dx=(space.x-center.x)*scale,dy=(space.y-center.y)*scale;
+      const label=fittedTitle(program,space.radius*scale,cell*.035);
       if(selected)label.style.fill='#dc24f4';
       label.setAttribute('transform','translate('+(x+c*dx-s*dy)+','+(y+s*dx+c*dy)+') scale(1,-1)');
       group.append(label);
@@ -811,9 +859,9 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
     grid.layouts.set(index,layout);
     if(isolated===index){
      for(const [i,{id,center}] of parts.entries()){
-      const [x,y,angle]=layout[i],ox=center.x-seed.center.x,oy=center.y-seed.center.y;
+      const [x,y,angle,scale=1]=layout[i],ox=center.x-seed.center.x,oy=center.y-seed.center.y;
       const hitGroup=svg('g');
-      hitGroup.setAttribute('transform','translate('+x+','+y+') rotate('+angle+') translate('+(-ox)+','+(-oy)+')');
+      hitGroup.setAttribute('transform','translate('+x+','+y+') rotate('+angle+') scale('+scale+') translate('+(-ox)+','+(-oy)+')');
       pieceHits(hitGroup,defs.querySelector('#'+id).getAttribute('d'),index,i);
       group.append(hitGroup);
      }
@@ -826,7 +874,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  function redraw(showGrid){
   const meshes=iterationMeshes().filter(allowsMesh),selectedSet=new Set(selected()),camera=e.camera,w=viewport.clientWidth,h=viewport.clientHeight;
   for(const mesh of meshes)mesh.updateWorldMatrix(true,false);
-  const key=JSON.stringify([selectedPiece,w,h,camera.projectionMatrix.elements,camera.matrixWorld.elements,showGrid?grid?.ver:null,isolated,meshes.map(m=>[m.uuid,m.geometry.uuid,m.userData.program,m.matrixWorld.elements,selectedSet.has(m)])]);
+  const key=JSON.stringify([pieceMode,selectedPiece,w,h,camera.projectionMatrix.elements,camera.matrixWorld.elements,showGrid?grid?.ver:null,isolated,meshes.map(m=>[m.uuid,m.geometry.uuid,m.userData.program,m.matrixWorld.elements,selectedSet.has(m)])]);
   if(key===visualKey)return;
   visualKey=key;overlay.replaceChildren();projectedRegions=[];
   if(!w||!h)return;
@@ -881,6 +929,26 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
    }
    if(focused&&paths.length)path(paths.map(p=>command(p.points)+(p.closed?' Z':'')).join(' '),cyan,2.5);
   }
+  if(isolationActive&&selectedPiece&&selectedPiece.index===isolated&&!grid.locked.has(isolated)){
+   const {index,part}=selectedPiece,mesh=index===0?grid.seed.meshes[part]:null;
+   const center=mesh?new T.Box3().setFromObject(mesh).getCenter(new T.Vector3()):new T.Vector3(...grid.layouts.get(index)[part].slice(0,2),0);
+   const [cx,cy]=point(center.x,center.y);
+   const handle=(tag,attrs,mode)=>{
+    const el=document.createElementNS(ns,tag);for(const [key,value]of Object.entries(attrs))el.setAttribute(key,value);
+    el.style.pointerEvents='all';el.style.cursor=mode==='rotate'?'grab':mode==='scale'?'nwse-resize':'move';
+    el.addEventListener('pointerdown',event=>startPieceDrag(event,index,part,mesh,mode));
+    el.addEventListener('dblclick',event=>{event.preventDefault();event.stopPropagation();});overlay.append(el);
+   };
+   if(pieceMode==='rotate')handle('circle',{cx,cy,r:62,fill:'none',stroke:'#dc24f4','stroke-width':7},'rotate');
+   else if(pieceMode==='scale'){
+    path('M'+cx+','+cy+' L'+(cx+65)+','+(cy-65),'#dc24f4',2);
+    handle('rect',{x:cx+57,y:cy-73,width:16,height:16,fill:'#dc24f4',stroke:'#fff','stroke-width':1},'scale');
+   }else{
+    handle('path',{d:'M'+cx+','+cy+' L'+(cx+70)+','+cy+' M'+(cx+58)+','+(cy-8)+' L'+(cx+70)+','+cy+' L'+(cx+58)+','+(cy+8),fill:'none',stroke:'#ff5284','stroke-width':6},'translate-y');
+    handle('path',{d:'M'+cx+','+cy+' L'+cx+','+(cy-70)+' M'+(cx-8)+','+(cy-58)+' L'+cx+','+(cy-70)+' L'+(cx+8)+','+(cy-58),fill:'none',stroke:'#21e0ed','stroke-width':6},'translate');
+   }
+  }
+
  }
  const mixInputs=[gridSize,cellSize,...mix.querySelectorAll('input[type=range]'),detail,curvature];
  const cornerState=source=>[...(grid?.layouts||[])].flatMap(([index,layout])=>{
@@ -952,12 +1020,12 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   const layout=grid.layouts.get(index);
   if(!layout)return [];
   return grid.seed.parts.flatMap(({paths,center},i)=>{
-   const [x,y,degrees]=layout[i],radians=degrees*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
+   const [x,y,degrees,scale=1]=layout[i],radians=degrees*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
    const program=grid.seed.parts[i].program||'';
    return paths.map(({points,closed})=>({
     ...kinds,closed,program,name:program||label,
     points:points.map(([px,py])=>{
-     const dx=px-center.x,dy=py-center.y;
+     const dx=(px-center.x)*scale,dy=(py-center.y)*scale;
      return fromPoint([x+c*dx-s*dy,y+s*dx+c*dy]);
     })
    }));
@@ -1126,6 +1194,8 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
    updateSavePanel();
    const wasMix=isolationActive;
    isolationActive=active&&showMix;
+   updatePieceControls();
+   manualDelete.disabled=!grid||!isolated||grid.locked.has(isolated)||e.isBusy();
    lockAll.disabled=!grid?.layouts.size||grid.locked.size===grid.layouts.size;
    unlockAll.disabled=!grid?.locked.size;
    overlay.classList.toggle('hide-program-titles',isolationActive&&!titles.checked);

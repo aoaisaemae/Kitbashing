@@ -14,10 +14,10 @@ function segmentDistance(a,b,c,d){
 export function programBoundaryGap(parts,layout,from,to){
  const segments=program=>parts.flatMap((part,i)=>{
   if(part.program?.trim()!==program)return [];
-  const [x,y,degrees]=layout[i],angle=degrees*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
+  const [x,y,degrees,scale=1]=layout[i],angle=degrees*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
   return part.paths.flatMap(({points})=>{
    const transformed=points.map(([px,py])=>{
-    const dx=px-part.center.x,dy=py-part.center.y;
+    const dx=(px-part.center.x)*scale,dy=(py-part.center.y)*scale;
     return [x+c*dx-s*dy,y+s*dx+c*dy];
    });
    return transformed.slice(1).map((point,j)=>[transformed[j],point]);

@@ -1,3 +1,4 @@
+import {addProgramText} from './rhino-program-text.js';
 let engine;
 
 export async function floorRhinoFile(records){
@@ -44,6 +45,7 @@ export async function floorRhinoFile(records){
      geometry.normals().computeNormals();
     }
     doc.objects().add(geometry,attributes);
+    if(record.points&&record.program)addProgramText(rhino,doc,record.program,record.points.map(([x,y,z])=>[x,-z,y]),attributes);
    }finally{geometry?.delete();attributes.delete();}
   }
   const bytes=doc.toByteArray();
