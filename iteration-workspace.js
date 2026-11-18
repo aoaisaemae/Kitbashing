@@ -983,6 +983,8 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
    el.setAttribute('fill',fill);el.setAttribute('fill-rule','evenodd');overlay.append(el);
   };
   const command=coords=>'M'+coords.map(p=>p.join(',')).join(' L');
+  if(workspaceStage==='spaces'&&showGrid){const [ox,oy]=point(0,0),[nx,ny]=point(0,1000),angle=Math.atan2(nx-ox,oy-ny)*180/Math.PI;const arrow=document.createElementNS(ns,'g');arrow.dataset.northArrow='true';arrow.setAttribute('transform','translate('+(w-28)+' 42) rotate('+(Number.isFinite(angle)?angle:0)+')');const shaft=document.createElementNS(ns,'path');shaft.setAttribute('d','M0 14V-9 M-5 -3L0 -13L5 -3');shaft.setAttribute('fill','none');shaft.setAttribute('stroke','#dc24f4');shaft.setAttribute('stroke-width','2');arrow.append(shaft);overlay.append(arrow);const text=document.createElementNS(ns,'text');text.textContent='N';text.setAttribute('x',w-28);text.setAttribute('y',18);text.style.fill='#dc24f4';text.style.fontSize='10px';text.dataset.northArrow='label';overlay.append(text);}
+
   if(showGrid&&gridArt){
    const [x,y]=point(0,0),[rx,ry]=point(1,0),[ux,uy]=point(0,1);
    gridArt.setAttribute('transform','matrix('+(rx-x)+' '+(ry-y)+' '+(ux-x)+' '+(uy-y)+' '+x+' '+y+')');
@@ -1007,7 +1009,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
     const indices=isolated===null?[0,...grid.layouts.keys()]:[isolated];
     for(const index of indices){if(grid.deleted.has(index))continue;const cx=grid.left+(index%grid.columns+.5)*grid.cell,cy=grid.top-(Math.floor(index/grid.columns)+.5)*grid.cell;
      path(command(siteBoundary.map(([x,y])=>point(cx+(x-mx)*scale,cy+(y-my)*scale)))+' Z','#70ffff88',1);overlay.lastElementChild.dataset.siteBoundary=String(index);
-     for(const [label,dx,dy] of [['N',0,.45],['E',.45,0],['S',0,-.45],['W',-.45,0]]){const [x,y]=point(cx+grid.cell*dx,cy+grid.cell*dy),text=document.createElementNS(ns,'text');text.textContent=label;text.setAttribute('x',x);text.setAttribute('y',y);text.style.fontSize='10px';text.dataset.siteCompass=label;overlay.append(text);}
+
     }
    }
 
@@ -1384,7 +1386,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
    }keep.disabled=discard.disabled=!ranked.size;visualKey='';setGridStatus('Selected '+ranked.size+' of '+reviewed+' variations satisfying the checked orientations.');};
   refreshOrientationPrograms([...new Set((grid?.seed.parts||[]).map(p=>p.program).filter(Boolean))].sort());
  }
-   return {mountOrientation,chosenMembers:()=>grid&&chosenSaveCell!==null&&!grid.deleted.has(chosenSaveCell)?packCell(chosenSaveCell):[],resetGrid(){grid=null;gridArt=null;isolated=null;selectedPiece=null;chosenSaveCell=null;visualKey='';},operateAnchors(action,amount){if(!grid?.mixed){setGridStatus('Create a grid and run MIX first.');return;}e.checkpoint();let count=0;for(const [index,layout]of grid.layouts){if(grid.deleted.has(index)||grid.locked.has(index))continue;for(const [i,part]of layout.entries()){if(!grid.seed.parts[i].anchored)continue;if(action==='offset'){part[0]+=(Math.random()*2-1)*grid.cell*.15*amount;part[1]+=(Math.random()*2-1)*grid.cell*.15*amount;}if(action==='rotate')part[2]+=(Math.random()*2-1)*45*amount;if(action==='scale')part[3]=(part[3]??1)*(1+(Math.random()*2-1)*.3*amount);count++;}}grid.ver++;updateGridArt(true);setGridStatus('Applied '+action+' to '+count+' anchored spaces only.');},insertIterations:ids=>insertIterations(ids,false),allowsMesh,inWorkspace,fitGrid,saveKey,saveState,restoreState,
+   return {mountOrientation,chosenMembers:()=>grid&&chosenSaveCell!==null&&!grid.deleted.has(chosenSaveCell)?packCell(chosenSaveCell):[],resetGrid(){grid=null;gridArt=null;isolated=null;selectedPiece=null;chosenSaveCell=null;visualKey='';},operateAnchors(action,amount){if(!grid?.mixed){setGridStatus('Create a grid and run MIX first.');return;}e.checkpoint();let count=0;for(const [index,layout]of grid.layouts){if(grid.deleted.has(index)||grid.locked.has(index))continue;for(const [i,part]of layout.entries()){if(!grid.seed.parts[i].anchored)continue;if(action==='reset'){const origin=grid.seed.parts[i].center;part[0]=grid.left+(index%grid.columns+.5)*grid.cell+origin.x-grid.seed.center.x;part[1]=grid.top-(Math.floor(index/grid.columns)+.5)*grid.cell+origin.y-grid.seed.center.y;part[2]=0;part[3]=1;}if(action==='offset'){part[0]+=(Math.random()*2-1)*grid.cell*.15*amount;part[1]+=(Math.random()*2-1)*grid.cell*.15*amount;}if(action==='rotate')part[2]+=(Math.random()*2-1)*45*amount;if(action==='scale')part[3]=(part[3]??1)*(1+(Math.random()*2-1)*.3*amount);count++;}}grid.ver++;updateGridArt(true);setGridStatus(action==='reset'?'Restored '+count+' anchored spaces to their original positions, rotations and scales.':'Applied '+action+' to '+count+' anchored spaces only.');},insertIterations:ids=>insertIterations(ids,false),allowsMesh,inWorkspace,fitGrid,saveKey,saveState,restoreState,
   update(active,showMix){
    if(!active||!showMix)editMode=false;
    if((!active||!showMix)&&pickingSaveCell){pickingSaveCell=false;viewport.style.cursor='';selectCellButton?.setAttribute('aria-pressed','false');}
