@@ -4,4 +4,4 @@ Use dist/saved-picker.js for saved-item and imported-item lists. Keep selection 
 
 # Workspace organization
 
-Use collapsible property-group sections with uppercase titles for workspace control panels. Spaces uses ASSIGN (BASE, ANCHOR), ASSEMBLE (FLOOR, ITERATE, SAVE), OPERATE (OPERATE, FLOORS), and SITE. Keep Spaces geometry and saved state separate from Iterations while reusing the iteration engine with its workspaceStage argument.
+Use collapsible property-group sections with uppercase titles for workspace control panels. Spaces uses ASSIGN (BASE, ANCHOR), ASSEMBLE (FLOOR, ITERATE, PICK, SAVE), OPERATE (SET UP: INSERT, COPY), and SITE. Keep Spaces geometry and saved state separate from Iterations while reusing the iteration engine with its workspaceStage argument.

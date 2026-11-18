@@ -83,7 +83,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   return text;
  }
  const titles=mix.querySelector('.mix-program-titles');
- titles.onchange=()=>overlay.classList.toggle('hide-program-titles',isolationActive&&!titles.checked);
+ titles.onchange=()=>overlay.classList.toggle('hide-program-titles',e.scene.userData.spacesDisplay?.text===false||(isolationActive&&!titles.checked));
  let activeMesh=null,selectionKey='',visualKey='',grid=null,saving=false,opening=false,projectedRegions=[];
  const iterationMeshes=()=>e.pieces().filter(m=>m.isLine&&m.visible&&m.userData.workspaceStage===workspaceStage);
  const selected=()=>e.selection().filter(m=>m.isLine&&m.visible&&m.userData.workspaceStage===workspaceStage&&e.canEdit(m));
@@ -159,7 +159,9 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
  if(anchorPanel){
   anchorPanel.innerHTML='<div class="section iteration-editor"><h3>Anchor</h3><label>Saved iteration <select class="anchor-iteration-picker"></select></label><button class="anchor-iteration-insert" type="button">Insert</button><h3>Choose space</h3><label>Anchoring space <select class="anchor-space"><option value="">None</option></select></label><p class="anchor-status hint" role="status"></p></div>';
   anchorPicker=anchorPanel.querySelector('select');anchorSpace=anchorPanel.querySelector('.anchor-space');
+  if(workspaceStage==='spaces'){anchorSpace.multiple=true;anchorSpace.size=6;anchorSpace.setAttribute('aria-label','Anchoring spaces');anchorSpace.closest('label').firstChild.textContent='Anchoring spaces ';const hint=document.createElement('small');hint.textContent='Ctrl/Cmd-click or Shift-click to select multiple. None clears the anchors.';anchorSpace.after(hint);}
   anchorSpace.onchange=()=>{
+   if(workspaceStage==='spaces'){applySpaceAnchors();return;}
    e.checkpoint();const choice=anchorSpace.value;
    const mesh=e.pieces().find(mesh=>mesh.studioId===choice);
    anchorSelection={iterationId:anchorPicker.value,index:choice?(mesh?anchorMeshes().indexOf(mesh):Number(choice.split(':').at(-1))):-1};
@@ -169,16 +171,16 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
    anchorPanel.querySelector('.anchor-status').textContent=choice?'Anchoring '+anchorSpace.selectedOptions[0].textContent+'.':'No anchoring space selected.';
   };
   installSavedPicker(anchorPicker,{insertButton:anchorPanel.querySelector('button'),status:anchorPanel.querySelector('.anchor-status'),isBusy:e.isBusy,onInsert:ids=>{if(workspaceStage==='spaces'){
- if(!anchorSpace.value){anchorPanel.querySelector('.anchor-status').textContent='Choose an anchoring space first.';return;}
- const record=saved.find(item=>item.id===anchorPicker.value),index=anchorSpace.value.startsWith('saved:')?Number(anchorSpace.value.split(':')[1]):anchorMeshes().findIndex(m=>m.studioId===anchorSpace.value);
- const chosen=e.pieces().find(m=>m.studioId===anchorSpace.value)||anchorMeshes()[index]||e.pieces().find(m=>m.userData.workspaceStage===workspaceStage&&m.userData.program===record?.members[index]?.program);
- if(index<0&&!chosen){anchorPanel.querySelector('.anchor-status').textContent='Choose an anchoring space first.';return;}
- e.checkpoint();anchorSelection={iterationId:anchorPicker.value,index};for(const m of e.pieces())if(m.userData.workspaceStage===workspaceStage)m.userData.iterationAnchor=m===chosen;
- if(grid){grid.seed.parts.forEach((part,i)=>part.anchored=grid.seed.meshes[i]===chosen);grid.ver++;}
- visualKey='';anchorOptionsKey='';e.mark(chosen?[chosen]:[]);anchorPanel.querySelector('.anchor-status').textContent='Anchored '+(chosen?.userData.program||record?.members[index]?.program||'space')+'.';return;
+ applySpaceAnchors();return;
  }insertIterations(ids,true);grid=null;gridArt=null;isolated=null;selectedPiece=null;clearRanking();visualKey='';anchorPanel.querySelector('.anchor-status').textContent='Inserted '+ids.length+' saved iterations.';},onDelete:async ids=>{await deleteIterations(ids);anchorPanel.querySelector('.anchor-status').textContent='Deleted '+ids.length+' saved iterations.';}});
  }
 
+ function applySpaceAnchors(){
+ const values=[...anchorSpace.selectedOptions].map(o=>o.value).filter(Boolean),record=saved.find(item=>item.id===anchorPicker.value),meshes=anchorMeshes(),chosen=new Set(),indices=[];
+ for(const value of values){const index=value.startsWith('saved:')?Number(value.split(':')[1]):meshes.findIndex(m=>m.studioId===value);if(index<0)continue;indices.push(index);const member=record?.members[index];const mesh=meshes[index]||e.pieces().filter(m=>m.visible&&m.userData.workspaceStage===workspaceStage&&m.userData.program===member?.program&&member?.positions?.length===m.geometry.attributes.position.array.length&&member.positions.every((v,i)=>Math.abs(v-m.geometry.attributes.position.array[i])<1e-5)).at(-1);if(mesh)chosen.add(mesh);}
+ e.checkpoint();anchorSelection={iterationId:anchorPicker.value,index:indices[0]??-1,indices};for(const mesh of e.pieces())if(mesh.userData.workspaceStage===workspaceStage)mesh.userData.iterationAnchor=chosen.has(mesh);
+ if(grid){grid.seed.parts.forEach((part,i)=>part.anchored=chosen.has(grid.seed.meshes[i]));grid.ver++;}visualKey='';anchorOptionsKey='';e.mark([...chosen]);anchorPanel.querySelector('.anchor-status').textContent=indices.length?'Anchored '+indices.length+' space(s).':'No anchoring spaces selected.';
+ }
  function anchorMeshes(){
   const matches=e.pieces().filter(mesh=>mesh.userData.workspaceStage===workspaceStage&&(mesh.userData.savedIterationId===anchorPicker?.value||mesh.userData.sourceIterationId===anchorPicker?.value));
   const group=matches.at(-1)?.userData.groupId;return group?matches.filter(mesh=>mesh.userData.groupId===group):matches;
@@ -189,6 +191,10 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   const choices=meshes.length?meshes.map((mesh,i)=>({value:mesh.studioId,name:mesh.userData.program||mesh.name,anchored:mesh.userData.iterationAnchor,index:i})):record?.members.map((member,i)=>({value:'saved:'+i,name:member.program||member.name,anchored:member.anchored,index:i}))||[];
   const key=JSON.stringify([anchorPicker.value,anchorSelection,choices]);if(key===anchorOptionsKey)return;anchorOptionsKey=key;
   anchorSpace.replaceChildren(new Option('None',''),...choices.map(choice=>new Option(choice.name,choice.value)));
+  if(workspaceStage==='spaces'){
+   const indices=anchorSelection?.iterationId===anchorPicker.value?(anchorSelection.indices||[anchorSelection.index]):choices.filter(c=>c.anchored).map(c=>c.index);
+   for(const option of anchorSpace.options){const choice=choices.find(c=>c.value===option.value);option.selected=choice?indices.includes(choice.index):!indices.length;}return;
+  }
   const pending=anchorSelection?.iterationId===anchorPicker.value?choices.find(choice=>choice.index===anchorSelection.index):null;
   anchorSpace.value=(anchorSelection?.iterationId===anchorPicker.value?pending:choices.find(choice=>choice.anchored))?.value||'';
  }
@@ -241,7 +247,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
     const mesh=e.add({geometry,name:member.name,curve:true,offset:new T.Vector3().fromArray(member.position),stage:workspaceStage});
     geometry.dispose();
     mesh.quaternion.fromArray(member.rotation);mesh.scale.fromArray(member.scale);mesh.material.color.setHex(member.color);
-    Object.assign(mesh.userData,{groupId:group,...(forMix?{savedIterationId:item.id}:{sourceIterationId:item.id}),program:member.program,floorLevel:member.floorLevel,iterationAnchor:anchorSelection?.iterationId===item.id?anchorSelection.index===memberIndex:Boolean(member.anchored)});
+    Object.assign(mesh.userData,{groupId:group,...(forMix?{savedIterationId:item.id}:{sourceIterationId:item.id}),program:member.program,floorLevel:member.floorLevel,iterationAnchor:anchorSelection?.iterationId===item.id?(anchorSelection.indices||[anchorSelection.index]).includes(memberIndex):Boolean(member.anchored)});
     return mesh;
    });
    e.select(meshes);e.mark(meshes);e.fit();refreshAnchorSpaces();mixStatus.textContent=status.textContent='Inserted '+item.name+'.';
@@ -269,7 +275,8 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   });
   input.addEventListener('change',()=>clampGridDimension(input));
  }
- let isolated=null,isolationActive=false;
+ let isolated=null,isolationActive=false,pickingSaveCell=false,chosenSaveCell=null;
+ let orientationRows=[],siteBoundary=[],boundaryVisible=false,orientationButton;
  const lockButton=mix.querySelector('.lock-variation');
  const showGridButton=mix.querySelector('.show-grid');
  ranking.innerHTML='<div class="section iteration-editor"><h3>Ranking</h3><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Separation"> Separation</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Overlapping"> Overlapping</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Continuity"> Continuity</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Rhythm"> Rhythm</label><label class="ranking-option"><input type="checkbox" name="ranking-criterion" value="Centrality"> Centrality</label><section class="program-continuity"><h3>Program continuity</h3><div class="spec-distance-pair"><select class="continuity-from" aria-label="First program"></select><span>next to</span><select class="continuity-to" aria-label="Second program"></select></div><button class="continuity-select" type="button">Select adjacent programs</button><p class="hint">Select variations where these program boundaries touch or are within 1 ft.</p></section><button class="rank-select" type="button">Select</button><div class="button-pair"><button class="rank-keep" type="button" disabled>KEEP</button><button class="rank-delete" type="button" disabled>DELETE</button></div><div class="button-pair"><button class="rank-lock-all" type="button" disabled>Lock all</button><button class="rank-unlock-all" type="button" disabled>Unlock all</button></div><button class="rank-outline" type="button" aria-pressed="false">Draw Outline</button><button class="rank-points" type="button" aria-pressed="false">PointsOn</button><label>Outline detail <input class="rank-detail" type="range" min="0" max="100" value="100"></label><label>Curvature <input class="rank-curvature" type="range" min="0" max="100" value="50"></label><p class="hint">Drag pieces inside an isolated variation to move them. With PointsOn, double-click a corner to fillet it or an edge to restore a hidden point.</p><button class="rank-show-grid" type="button">Return to full grid</button><p class="hint" role="status"></p></div>';
@@ -300,7 +307,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   if(!isolationActive||!grid?.placed||event.button!==0||e.isBusy())return;
   const bounds=viewport.getBoundingClientRect();
   if(!bounds.width||!bounds.height)return;
-  const point=new T.Vector3((event.clientX-bounds.left)/bounds.width*2-1,1-(event.clientY-bounds.top)/bounds.height*2,0).unproject(e.camera);
+  const point=pointerXY(event);
   const row=Math.floor((grid.top-point.y)/grid.cell),column=Math.floor((point.x-grid.left)/grid.cell);
   if(row<0||column<0||row>=grid.rows||column>=grid.columns)return;
   const index=row*grid.columns+column;
@@ -310,12 +317,16 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   isolateCell(index);
  });
  let selectedPiece=null,pieceDrag=null;
- let pieceMode='translate';
+ let pieceMode='translate',editMode=false;
+ const editBar=document.createElement('div');editBar.className='iteration-edit-bar';editBar.innerHTML='<button type="button" class="iteration-edit-toggle" aria-pressed="false">Edit mode</button><span hidden><button type="button" data-edit-mode="translate">Move</button><button type="button" data-edit-mode="rotate">Rotate</button><button type="button" data-edit-mode="scale">Scale</button></span>';viewport.append(editBar);editBar.hidden=true;
+ editBar.firstElementChild.onclick=()=>{editMode=!editMode;selectedPiece=null;visualKey='';updateGridArt(true);updatePieceControls();};
+ for(const button of editBar.querySelectorAll('[data-edit-mode]'))button.onclick=()=>{pieceMode=button.dataset.editMode;visualKey='';updatePieceControls();};
  const pieceControls=document.createElement('section');pieceControls.className='piece-transform';
  pieceControls.innerHTML='<h3>Edit isolated piece</h3><div class="button-pair"><button type="button" data-piece-mode="translate">Move (W)</button><button type="button" data-piece-mode="rotate">Rotate (E)</button><button type="button" data-piece-mode="scale">Scale (R)</button></div><p class="hint">Click a piece, then drag its workspace handles. Shift snaps rotation to 15° or scale to 10%. Drag the piece itself to move it.</p>';
  ranking.querySelector('.rank-outline').before(pieceControls);
  function updatePieceControls(){
-  pieceControls.hidden=!isolationActive||isolated===null;
+  editBar.hidden=workspaceStage!=='spaces'||!isolationActive||isolated===null;editBar.firstElementChild.setAttribute('aria-pressed',String(editMode));editBar.lastElementChild.hidden=!editMode;for(const button of editBar.querySelectorAll('[data-edit-mode]'))button.setAttribute('aria-pressed',String(button.dataset.editMode===pieceMode));
+  pieceControls.hidden=!isolationActive||isolated===null||(workspaceStage==='spaces'&&!editMode);
   for(const button of pieceControls.querySelectorAll('button'))button.setAttribute('aria-pressed',String(button.dataset.pieceMode===pieceMode));
  }
  for(const button of pieceControls.querySelectorAll('button'))button.onclick=()=>{pieceMode=button.dataset.pieceMode;visualKey='';updatePieceControls();};
@@ -326,15 +337,15 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
  },true);
  function pointerXY(event){
   const bounds=viewport.getBoundingClientRect();
-  return new T.Vector3((event.clientX-bounds.left)/bounds.width*2-1,1-(event.clientY-bounds.top)/bounds.height*2,0).unproject(e.camera);
+  const ndc=new T.Vector2((event.clientX-bounds.left)/bounds.width*2-1,1-(event.clientY-bounds.top)/bounds.height*2);const ray=new T.Raycaster();ray.setFromCamera(ndc,e.camera);return ray.ray.intersectPlane(new T.Plane(new T.Vector3(0,0,1),0),new T.Vector3())||new T.Vector3(Infinity,Infinity,0);
  }
  function startPieceDrag(event,index,part,mesh=null,mode='translate'){
-  if(event.button!==0||!isolationActive||isolated!==index||e.isBusy()||event.altKey||event.ctrlKey||event.metaKey)return;
+  if((workspaceStage==='spaces'&&!editMode)||event.button!==0||!isolationActive||isolated!==index||e.isBusy()||event.altKey||event.ctrlKey||event.metaKey)return;
   event.preventDefault();event.stopPropagation();
   if(grid.locked.has(index)||(mesh&&!e.canEdit(mesh))){
    setGridStatus('Unlock this variation before moving its pieces.');return;
   }
-  if((index||workspaceStage==='spaces')&&(grid.seed.parts[part]?.anchored||mesh?.userData.iterationAnchor)){setGridStatus('Choose another anchoring space or None before editing this piece.');return;}
+  if(!(workspaceStage==='spaces'&&editMode)&&(index||workspaceStage==='spaces')&&(grid.seed.parts[part]?.anchored||mesh?.userData.iterationAnchor)){setGridStatus('Choose another anchoring space or None before editing this piece.');return;}
   selectedPiece={index,part};updatePieceControls();
   updateGridArt(true);
   e.select([]);
@@ -351,8 +362,8 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   hit.setAttribute('d',d);hit.setAttribute('fill','transparent');hit.setAttribute('fill-rule','evenodd');
   hit.setAttribute('stroke','transparent');hit.setAttribute('stroke-width','10');hit.setAttribute('vector-effect','non-scaling-stroke');
   hit.dataset.editPiece=String(part);
-  hit.style.pointerEvents='all';hit.style.cursor='move';
-  hit.addEventListener('pointerdown',event=>startPieceDrag(event,index,part,mesh));
+  hit.style.pointerEvents=workspaceStage==='spaces'&&!editMode?'none':'all';hit.style.cursor=pieceMode==='translate'?'move':'grab';
+  hit.addEventListener('pointerdown',event=>startPieceDrag(event,index,part,mesh,pieceMode));
   hit.addEventListener('dblclick',event=>{event.preventDefault();event.stopPropagation();});
   parent.append(hit);
  }
@@ -397,7 +408,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
    else{grid.layouts.set(drag.index,drag.layout);updateGridArt(true);}
    grid.ver++;visualKey='';
   }else if(drag.changed){
-   if(drag.mesh)e.mark([drag.mesh]);
+   if(drag.mesh){e.mark([drag.mesh]);grid.seed=getSeed()||grid.seed;}
    setGridStatus('Edited a piece in this variation. Lock the variation to keep it during MIX.');
   }
  }
@@ -417,7 +428,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
  };
  function isolateCell(index){
 
-  selectedPiece=null;
+  selectedPiece=null;editMode=false;
   isolated=index;updateGridArt(true);refreshOutlines();updateLockButton();
   if(index)e.select([]);
   e.fit(cellBounds(index),true);
@@ -441,7 +452,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   if(!event.shiftKey||event.button!==0||!isolationActive||ranking.hidden||!ranked.size)return;
   const bounds=viewport.getBoundingClientRect();
   if(!bounds.width||!bounds.height)return;
-  const point=new T.Vector3((event.clientX-bounds.left)/bounds.width*2-1,1-(event.clientY-bounds.top)/bounds.height*2,0).unproject(e.camera);
+  const point=pointerXY(event);
   const row=Math.floor((grid.top-point.y)/grid.cell),col=Math.floor((point.x-grid.left)/grid.cell);
   if(row<0||row>=grid.rows||col<0||col>=grid.columns)return;
   if(!ranked.delete(row*grid.columns+col))return;
@@ -551,7 +562,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
    edgeTarget.addEventListener('dblclick',event=>{
     event.preventDefault();event.stopPropagation();
     const bounds=viewport.getBoundingClientRect();
-    const point=new T.Vector3((event.clientX-bounds.left)/bounds.width*2-1,1-(event.clientY-bounds.top)/bounds.height*2,0).unproject(e.camera);
+    const point=pointerXY(event);
     const distance=(x,y,[ax,ay],[bx,by])=>{
      const dx=bx-ax,dy=by-ay,length=dx*dx+dy*dy;
      const t=length?T.MathUtils.clamp(((x-ax)*dx+(y-ay)*dy)/length,0,1):0;
@@ -615,6 +626,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
  function refreshPrograms(preferred){
   const names=[...new Set((grid?.seed.parts||[]).map(part=>part.program?.trim()).filter(Boolean))].sort();
   const key=JSON.stringify(names);
+  refreshOrientationPrograms(names);
   if(key===continuityKey&&!preferred)return;
   continuityKey=key;
   const values=typeof preferred?.[0]==='string'?[preferred]:preferred;
@@ -729,14 +741,14 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
  };
   function fitGrid(){
   if(!isolationActive||!grid)return false;
-  selectedPiece=null;
+  selectedPiece=null;editMode=false;
   isolated=null;updateGridArt(true);refreshOutlines();updateLockButton();clearRanking();
   e.fit(gridBounds(),true);setGridStatus('Showing the full grid.');
   return true;
  }
  showGridButton.onclick=ranking.querySelector('.rank-show-grid').onclick=fitGrid;
- const inWorkspace=mesh=>!inIterations()||mesh.userData.workspaceStage!==workspaceStage||!!mesh.userData.realitySpace||(workspaceStage==='spaces'&&!isolationActive)||Boolean(mesh.userData.savedIterationId)===isolationActive;
- const allowsMesh=mesh=>inWorkspace(mesh)&&(!isolationActive||isolated===null||(isolated===0&&grid.seed.meshes.includes(mesh)));
+ const inWorkspace=mesh=>!inIterations()||mesh.userData.workspaceStage!==workspaceStage||!!mesh.userData.realitySpace||workspaceStage==='spaces'||Boolean(mesh.userData.savedIterationId)===isolationActive;
+ const allowsMesh=mesh=>(workspaceStage!=='spaces'||(mesh.userData.iterationAnchor?e.scene.userData.spacesDisplay?.anchors:mesh.userData.spaceKind==='outline'?e.scene.userData.spacesDisplay?.outline:e.scene.userData.spacesDisplay?.programs)!==false)&&inWorkspace(mesh)&&(!isolationActive||isolated===null||(isolated===0&&grid.seed.meshes.includes(mesh)));
  function gridBounds(){
   if(!grid)return new T.Box3();
   return new T.Box3(new T.Vector3(grid.left,grid.top-grid.rows*grid.cell,0),new T.Vector3(grid.left+grid.columns*grid.cell,grid.top,0));
@@ -818,18 +830,18 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   }
   const cell=Math.max(seed.size.x*1.15,seed.size.y*1.15,packingWidth*1.06,packingHeight*1.06,.01);
   const reuse=grid&&grid.columns===columns&&grid.rows===rows&&Math.abs(grid.cell-cell)<cell*1e-6;
-  const left=reuse?grid.left:seed.center.x-columns*cell/2,top=reuse?grid.top:seed.center.y+rows*cell/2;
+  const left=workspaceStage==='spaces'?seed.center.x-cell/2:reuse?grid.left:seed.center.x-columns*cell/2,top=workspaceStage==='spaces'?seed.center.y+cell/2:reuse?grid.top:seed.center.y+rows*cell/2;
   grid={columns,rows,cell,left,top,seed,placed:place,compact,packed,deleted:new Set(),locked:new Set(),layouts:new Map(),mixed:false,ver:Date.now()};
-  isolated=null;updateLockButton();clearRanking();
-  if(place){
+  isolated=null;chosenSaveCell=null;pickingSaveCell=false;updateLockButton();clearRanking();
+  if(place&&workspaceStage!=='spaces'){
    const dx=left+cell/2-seed.center.x,dy=top-cell/2-seed.center.y;
    if(dx||dy)e.checkpoint();
    for(const mesh of seed.meshes){mesh.position.x+=dx;mesh.position.y+=dy;mesh.updateMatrixWorld(true);}
    e.select(seed.meshes);e.mark(seed.meshes);
   }
   updateGridArt();
-  e.fit(gridBounds());
-  mixStatus.textContent=place?'Composition moved to the top-left cell.':'Created a '+columns+' × '+rows+' grid with '+(cell/foot).toLocaleString(undefined,{maximumFractionDigits:4})+' ft cells.';
+  e.fit(gridBounds(),true);
+  mixStatus.textContent=place?(workspaceStage==='spaces'?'Grid created around the original composition.':'Composition moved to the top-left cell.'):'Created a '+columns+' × '+rows+' grid with '+(cell/foot).toLocaleString(undefined,{maximumFractionDigits:4})+' ft cells.';
  }
  mix.querySelector('.make-iteration-grid').onclick=()=>createGrid(true);
  mix.querySelector('.mix-iterations').onclick=()=>{
@@ -861,7 +873,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   lines.setAttribute('d',segments.join(' '));lines.setAttribute('stroke','#21e0ed55');lines.setAttribute('fill','none');lines.setAttribute('vector-effect','non-scaling-stroke');art.append(lines);
   if(placed){
    const parts=seed.parts.map(({paths,center,program,radius},i)=>{
-    const id='iteration-grid-part-'+i,shape=svg('path');
+    const id=workspaceStage+'-iteration-grid-part-'+i,shape=svg('path');
     shape.id=id;shape.setAttribute('d',paths.map(({points,closed})=>'M'+points.map(([x,y])=>[x-seed.center.x,y-seed.center.y].join(',')).join(' L')+(closed?' Z':'')).join(' '));
     shape.setAttribute('stroke','var(--variation-stroke, '+cyan+')');shape.setAttribute('stroke-width','1');shape.setAttribute('vector-effect','non-scaling-stroke');
     shape.setAttribute('fill',program&&paths.every(p=>p.closed)?'var(--variation-fill, #21e0ed28)':'none');shape.setAttribute('fill-rule','evenodd');defs.append(shape);
@@ -933,7 +945,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
      if(space){
       const radians=angle*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
       const dx=(space.x-center.x)*scale,dy=(space.y-center.y)*scale;
-      const label=fittedTitle(program,space.radius*scale,cell*.035);
+      const label=fittedTitle(program,space.radius*scale,cell*.035);label.dataset.programLabel='true';label.dataset.anchorLabel=String(Boolean(anchored));
       if(anchored)label.style.fill=anchorCyan;
       if(selected)label.style.fill='#dc24f4';
       label.setAttribute('transform','translate('+(x+c*dx-s*dy)+','+(y+s*dx+c*dy)+') scale(1,-1)');
@@ -958,7 +970,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
  function redraw(showGrid){
   const meshes=iterationMeshes().filter(allowsMesh),selectedSet=new Set(selected()),camera=e.camera,w=viewport.clientWidth,h=viewport.clientHeight;
   for(const mesh of meshes)mesh.updateWorldMatrix(true,false);
-  const key=JSON.stringify([pieceMode,selectedPiece,w,h,camera.projectionMatrix.elements,camera.matrixWorld.elements,showGrid?grid?.ver:null,isolated,meshes.map(m=>[m.uuid,m.geometry.uuid,m.userData.program,m.userData.iterationAnchor,m.matrixWorld.elements,selectedSet.has(m)])]);
+  const key=JSON.stringify([e.scene.userData.spacesDisplay,pieceMode,editMode,selectedPiece,w,h,camera.projectionMatrix.elements,camera.matrixWorld.elements,showGrid?grid?.ver:null,isolated,chosenSaveCell,boundaryVisible,siteBoundary,meshes.map(m=>[m.uuid,m.geometry.uuid,m.userData.program,m.userData.iterationAnchor,m.matrixWorld.elements,selectedSet.has(m)])]);
   if(key===visualKey)return;
   visualKey=key;overlay.replaceChildren();projectedRegions=[];
   if(!w||!h)return;
@@ -972,22 +984,34 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   };
   const command=coords=>'M'+coords.map(p=>p.join(',')).join(' L');
   if(showGrid&&gridArt){
-   const [x,y]=point(0,0),[rx]=point(1,0),[,uy]=point(0,1);
-   gridArt.setAttribute('transform','matrix('+(rx-x)+' 0 0 '+(uy-y)+' '+x+' '+y+')');
+   const [x,y]=point(0,0),[rx,ry]=point(1,0),[ux,uy]=point(0,1);
+   gridArt.setAttribute('transform','matrix('+(rx-x)+' '+(ry-y)+' '+(ux-x)+' '+(uy-y)+' '+x+' '+y+')');
    for(const cell of gridArt.querySelectorAll('[data-cell]')){
     const index=Number(cell.dataset.cell);
     cell.style.display=isolated===null||index===isolated?'':'none';
     colorVariation(cell,grid.locked.has(index)||ranked.has(index));
     cell.style.opacity=isolated===null&&ranked.size&&!ranked.has(index)?'.25':'';
+    for(const label of cell.querySelectorAll('[data-program-label]')){const d=e.scene.userData.spacesDisplay;label.style.display=(label.dataset.anchorLabel==='true'?d?.anchors:d?.programs)===false?'none':'';}
     const outline=cell.querySelector('[data-variation-outline]');
-    const outlined=showOutlines&&(isolated===index||!ranked.size||ranked.has(index));
+    const outlined=e.scene.userData.spacesDisplay?.outline!==false&&showOutlines&&(isolated===index||!ranked.size||ranked.has(index));
     if(outlined&&!outline)drawVariationOutline(index,cell);
     if(!outlined)outline?.remove();
     const dimPieces=Boolean(cell.querySelector('[data-variation-outline]'));
-    for(const piece of cell.querySelectorAll('[data-variation-piece]'))piece.style.opacity=(piece.dataset.selectedPiece==='true'||piece.dataset.anchoredPiece==='true')?'1':dimPieces?'0.28':'';
+    for(const piece of cell.querySelectorAll('[data-variation-piece]')){const display=e.scene.userData.spacesDisplay;piece.style.display=(piece.dataset.anchoredPiece==='true'?display?.anchors:display?.programs)===false?'none':'';piece.style.opacity=(piece.dataset.selectedPiece==='true'||piece.dataset.anchoredPiece==='true')?'1':dimPieces?'0.28':'';}
    }
    gridArt.querySelector(':scope > path').style.display=isolated===null?'':'none';
    overlay.append(gridArt);
+   if(boundaryVisible&&siteBoundary.length){
+    const xs=siteBoundary.map(p=>p[0]),ys=siteBoundary.map(p=>p[1]),mx=(Math.max(...xs)+Math.min(...xs))/2,my=(Math.max(...ys)+Math.min(...ys))/2;
+    const scale=grid.cell*.88/Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys));
+    const indices=isolated===null?[0,...grid.layouts.keys()]:[isolated];
+    for(const index of indices){if(grid.deleted.has(index))continue;const cx=grid.left+(index%grid.columns+.5)*grid.cell,cy=grid.top-(Math.floor(index/grid.columns)+.5)*grid.cell;
+     path(command(siteBoundary.map(([x,y])=>point(cx+(x-mx)*scale,cy+(y-my)*scale)))+' Z','#70ffff88',1);overlay.lastElementChild.dataset.siteBoundary=String(index);
+     for(const [label,dx,dy] of [['N',0,.45],['E',.45,0],['S',0,-.45],['W',-.45,0]]){const [x,y]=point(cx+grid.cell*dx,cy+grid.cell*dy),text=document.createElementNS(ns,'text');text.textContent=label;text.setAttribute('x',x);text.setAttribute('y',y);text.style.fontSize='10px';text.dataset.siteCompass=label;overlay.append(text);}
+    }
+   }
+
+   if(chosenSaveCell!==null&&isolated===null&&workspaceStage==='spaces'&&!grid.deleted.has(chosenSaveCell)){const box=cellBounds(chosenSaveCell);path(command([point(box.min.x,box.min.y),point(box.max.x,box.min.y),point(box.max.x,box.max.y),point(box.min.x,box.max.y)])+' Z','#70ffff',3);overlay.lastElementChild.dataset.saveCellHighlight=String(chosenSaveCell);}
    if(isolated!==null){const box=cellBounds(isolated);path(command([point(box.min.x,box.min.y),point(box.max.x,box.min.y),point(box.max.x,box.max.y),point(box.min.x,box.max.y)])+' Z','#21e0ed55',1);}
   }
   for(const mesh of meshes){
@@ -1015,7 +1039,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
    }
    if(focused&&paths.length)path(paths.map(p=>command(p.points)+(p.closed?' Z':'')).join(' '),anchored?anchorCyan:cyan,2.5);
   }
-  if(isolationActive&&selectedPiece&&selectedPiece.index===isolated&&!grid.locked.has(isolated)){
+  if((workspaceStage!=='spaces'||editMode)&&isolationActive&&selectedPiece&&selectedPiece.index===isolated&&!grid.locked.has(isolated)){
    const {index,part}=selectedPiece,mesh=index===0?grid.seed.meshes[part]:null;
    const center=mesh?new T.Box3().setFromObject(mesh).getCenter(new T.Vector3()):new T.Vector3(...grid.layouts.get(index)[part].slice(0,2),0);
    const [cx,cy]=point(center.x,center.y);
@@ -1043,10 +1067,10 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
  });
  function saveKey(){
   return [grid?.ver,isolated,[...(grid?.locked||[])],[...(grid?.deleted||[])],[...ranked],cornerState(filletsByLayout),
-   mixInputs.map(input=>input.value),titles.checked,showOutlines,showPoints,criteria.map(input=>input.checked),cornerState(restoredByLayout),continuityRows.map(row=>row.map(select=>select.value)),continuityChecks.map(input=>input.checked),anchorSelection];
+   mixInputs.map(input=>input.value),titles.checked,showOutlines,showPoints,criteria.map(input=>input.checked),cornerState(restoredByLayout),continuityRows.map(row=>row.map(select=>select.value)),continuityChecks.map(input=>input.checked),anchorSelection,chosenSaveCell,orientationRows.map(r=>[r.enabled.checked,r.program.value,r.direction.value]),boundaryVisible];
  }
  function saveState(){
-  const state={key:saveKey(),status:mixStatus.textContent,anchorSelection:anchorSelection?{...anchorSelection}:null};
+  const state={key:saveKey(),status:mixStatus.textContent,chosenSaveCell,orientation:{rules:orientationRows.map(r=>[r.enabled.checked,r.program.value,r.direction.value]),boundaryVisible,boundary:siteBoundary},anchorSelection:anchorSelection?{...anchorSelection}:null};
   if(grid){
    const {meshes,...seed}=grid.seed;
    state.grid={...grid,seed:{...seed,parts:seed.parts.map(part=>({...part})),meshIds:meshes.map(mesh=>mesh.studioId)},layouts:[...grid.layouts],locked:[...grid.locked],deleted:[...grid.deleted]};
@@ -1055,7 +1079,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
  }
  function restoreState(state){
   if(!state?.key)return;
-  anchorSelection=state.anchorSelection||null;anchorOptionsKey='';
+  chosenSaveCell=Number.isInteger(state.chosenSaveCell)?state.chosenSaveCell:null;pickingSaveCell=false;anchorSelection=state.anchorSelection||null;anchorOptionsKey='';
   grid=null;gridArt=null;isolated=null;clearRanking();
   const [,cell,, ,results,fillets,values,showTitles,outlines,points,checked,restored=[],continuity=[],continuityEnabled=[]]=state.key;
   mixInputs.forEach((input,i)=>{if(values[i]!=null)input.value=values[i];});
@@ -1089,6 +1113,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   refreshPrograms(continuity);
   continuityChecks.forEach((input,i)=>{input.checked=continuityEnabled[i]??true;});
   updateLockButton();
+  if(state.orientation){boundaryVisible=!!state.orientation.boundaryVisible;siteBoundary=state.orientation.boundary||[];for(const [i,row]of orientationRows.entries()){const rule=state.orientation.rules?.[i];if(rule){row.enabled.checked=!!rule[0];row.program.value=rule[1];row.direction.value=rule[2];}}if(orientationButton)orientationButton.setAttribute('aria-pressed',String(boundaryVisible));visualKey='';}
   if(state.status)setGridStatus(state.status);
  }
  function matrixCell(index,local=false){
@@ -1204,6 +1229,24 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
  const byClass=selector=>savePanel.querySelector(selector);
  const matrixName=byClass('.matrix-name'),matrixLibrary=byClass('.matrix-library'),cellPicker=byClass('.matrix-cell');
  const matrixStatus=savePanel.querySelector('[role=status]');
+ let selectCellButton,selectedCellStatus;
+ if(workspaceStage==='spaces'){
+  cellPicker.closest('label').hidden=true;
+  selectCellButton=document.createElement('button');selectCellButton.type='button';selectCellButton.className='matrix-select-cell';selectCellButton.textContent='Select iteration';selectCellButton.setAttribute('aria-pressed','false');
+  selectedCellStatus=document.createElement('p');selectedCellStatus.className='hint matrix-selected-cell';selectedCellStatus.setAttribute('role','status');selectedCellStatus.textContent='No iteration selected.';
+  cellPicker.closest('label').after(selectCellButton,selectedCellStatus);
+  selectCellButton.onclick=()=>{if(!grid||e.isBusy())return;pickingSaveCell=!pickingSaveCell;if(pickingSaveCell&&isolated!==null)fitGrid();selectCellButton.setAttribute('aria-pressed',String(pickingSaveCell));selectedCellStatus.textContent=pickingSaveCell?'Click a grid cell to choose the iteration to name and save.':'Selection cancelled.';viewport.style.cursor=pickingSaveCell?'crosshair':'';};
+  viewport.addEventListener('pointerdown',event=>{if(pickingSaveCell&&isolationActive&&event.button===0){event.preventDefault();event.stopImmediatePropagation();}},true);
+  viewport.addEventListener('click',event=>{
+   if(!pickingSaveCell||!isolationActive||!grid||event.button!==0)return;
+   event.preventDefault();event.stopImmediatePropagation();
+   const point=pointerXY(event),row=Math.floor((grid.top-point.y)/grid.cell),column=Math.floor((point.x-grid.left)/grid.cell),index=row*grid.columns+column;
+   if(row<0||column<0||row>=grid.rows||column>=grid.columns||grid.deleted.has(index)||(index!==0&&!grid.layouts.has(index))){selectedCellStatus.textContent='Choose a cell containing an iteration.';return;}
+   chosenSaveCell=index;cellPicker.value=String(index);pickingSaveCell=false;viewport.style.cursor='';selectCellButton.setAttribute('aria-pressed','false');selectedCellStatus.textContent='Selected row '+(row+1)+', column '+(column+1)+'.';visualKey='';byClass('.matrix-cell-name').focus();
+  },true);
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&pickingSaveCell){pickingSaveCell=false;viewport.style.cursor='';selectCellButton.setAttribute('aria-pressed','false');selectedCellStatus.textContent='Selection cancelled.';}},true);
+ }
+
  const savedCellsPanel=document.createElement('section');savedCellsPanel.className='saved-matrix-cell-library';
  savedCellsPanel.innerHTML='<h3>Insert saved matrix iteration</h3><label>Saved matrix iteration <select class="saved-matrix-cell-picker"></select></label><button class="saved-matrix-cell-insert" type="button">Insert saved iteration</button>';
  byClass('.matrix-cell-save').after(savedCellsPanel);
@@ -1283,10 +1326,10 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
   onDelete:async ids=>{for(const id of ids)await store.remove(id);await refreshMatrices();matrixStatus.textContent='Deleted '+ids.length+' saved matrices.';}
  });
  byClass('.matrix-cell-save').onclick=async()=>{
-  if(fileBusy||e.isBusy()||!grid||cellPicker.value==='')return;
+  if(fileBusy||e.isBusy()||!grid||cellPicker.value===''||(workspaceStage==='spaces'&&(chosenSaveCell===null||grid.deleted.has(chosenSaveCell))))return;
   const input=byClass('.matrix-cell-name'),name=input.value.trim();
   if(!name){input.focus();return reportMatrix('Enter an iteration name.');}
-  const members=packCell(Number(cellPicker.value));
+  const members=packCell(workspaceStage==='spaces'?chosenSaveCell:Number(cellPicker.value));
   if(!members.length)return reportMatrix('Choose a cell that contains an iteration.');
   fileBusy=true;
   try{
@@ -1323,10 +1366,28 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
    else if(ids.includes(Number(previous)))cellPicker.value=previous||'0';
   }
   for(const selector of ['.matrix-save','.matrix-ai','.matrix-rhino','.matrix-cell-save'])byClass(selector).disabled=fileBusy||!grid;
+  if(selectCellButton){selectCellButton.disabled=fileBusy||!grid;byClass('.matrix-cell-save').disabled=fileBusy||!grid||chosenSaveCell===null||grid.deleted.has(chosenSaveCell);if(chosenSaveCell!==null&&!pickingSaveCell)selectedCellStatus.textContent='Selected row '+(Math.floor(chosenSaveCell/(grid?.columns||1))+1)+', column '+(chosenSaveCell%(grid?.columns||1)+1)+'.';}
   matrixSelection.update();
  }
-   return {insertIterations:ids=>insertIterations(ids,false),allowsMesh,inWorkspace,fitGrid,saveKey,saveState,restoreState,
+
+ function refreshOrientationPrograms(names){for(const row of orientationRows){if(row.key===names.join('|'))continue;row.key=names.join('|');const previous=row.program.value;row.program.replaceChildren(new Option('Choose program',''),...names.map(name=>new Option(name,name)));if(names.includes(previous))row.program.value=previous;}}
+ function mountOrientation(parent){
+  orientationButton=document.createElement('button');orientationButton.type='button';orientationButton.className='orientation-boundary';orientationButton.textContent='Site boundary';orientationButton.setAttribute('aria-pressed',String(boundaryVisible));parent.append(orientationButton);
+  const heading=document.createElement('h3');heading.textContent='ORIENTATION';parent.append(heading);
+  const note=document.createElement('p');note.className='hint';note.textContent='N: north end · E: bay · S: highway · W: streets';parent.append(note);
+  for(let i=0;i<4;i++){const row=document.createElement('div');row.className='orientation-row';row.innerHTML='<input type="checkbox" aria-label="Enable orientation rule '+(i+1)+'"><select aria-label="Orientation program '+(i+1)+'"></select><span>on the</span><select aria-label="Cardinal direction '+(i+1)+'"></select><span>side</span>';const [enabled,program,direction]=row.querySelectorAll('input,select');for(const name of ['N','E','S','W','NW','NE','SE','SW'])direction.add(new Option(name,name));orientationRows.push({enabled,program,direction});for(const input of [enabled,program,direction])input.onchange=clearRanking;parent.append(row);}
+  const run=document.createElement('button');run.type='button';run.className='orientation-select';run.textContent='Select orientations';parent.append(run);
+  orientationButton.onclick=async()=>{try{if(!siteBoundary.length){orientationButton.disabled=true;const response=await fetch(new URL('./site-context.json',import.meta.url));if(!response.ok)throw Error('Site boundary unavailable');const data=await response.json();siteBoundary=data.boundary;}boundaryVisible=!boundaryVisible;orientationButton.setAttribute('aria-pressed',String(boundaryVisible));visualKey='';}catch(error){setGridStatus(error.message);}finally{orientationButton.disabled=false;}};
+  run.onclick=()=>{if(!grid?.mixed)return setGridStatus('Run MIX to generate variations first.');const rules=orientationRows.filter(r=>r.enabled.checked);if(!rules.length||rules.some(r=>!r.program.value))return setGridStatus('Choose a program for each checked orientation rule.');fitGrid();let reviewed=0;const angles={E:0,NE:Math.PI/4,N:Math.PI/2,NW:3*Math.PI/4,W:Math.PI,SW:-3*Math.PI/4,S:-Math.PI/2,SE:-Math.PI/4};
+   for(const [index,layout]of grid.layouts){if(grid.deleted.has(index)||grid.locked.has(index))continue;reviewed++;const cx=grid.left+(index%grid.columns+.5)*grid.cell,cy=grid.top-(Math.floor(index/grid.columns)+.5)*grid.cell;
+    if(rules.every(rule=>{const points=layout.filter((_,i)=>grid.seed.parts[i].program===rule.program.value);if(!points.length)return false;const dx=points.reduce((sum,p)=>sum+p[0],0)/points.length-cx,dy=points.reduce((sum,p)=>sum+p[1],0)/points.length-cy;if(Math.hypot(dx,dy)<grid.cell*.005)return false;const delta=Math.atan2(Math.sin(Math.atan2(dy,dx)-angles[rule.direction.value]),Math.cos(Math.atan2(dy,dx)-angles[rule.direction.value]));return Math.abs(delta)<=Math.PI/8+1e-8;}))ranked.add(index);
+   }keep.disabled=discard.disabled=!ranked.size;visualKey='';setGridStatus('Selected '+ranked.size+' of '+reviewed+' variations satisfying the checked orientations.');};
+  refreshOrientationPrograms([...new Set((grid?.seed.parts||[]).map(p=>p.program).filter(Boolean))].sort());
+ }
+   return {mountOrientation,chosenMembers:()=>grid&&chosenSaveCell!==null&&!grid.deleted.has(chosenSaveCell)?packCell(chosenSaveCell):[],resetGrid(){grid=null;gridArt=null;isolated=null;selectedPiece=null;chosenSaveCell=null;visualKey='';},operateAnchors(action,amount){if(!grid?.mixed){setGridStatus('Create a grid and run MIX first.');return;}e.checkpoint();let count=0;for(const [index,layout]of grid.layouts){if(grid.deleted.has(index)||grid.locked.has(index))continue;for(const [i,part]of layout.entries()){if(!grid.seed.parts[i].anchored)continue;if(action==='offset'){part[0]+=(Math.random()*2-1)*grid.cell*.15*amount;part[1]+=(Math.random()*2-1)*grid.cell*.15*amount;}if(action==='rotate')part[2]+=(Math.random()*2-1)*45*amount;if(action==='scale')part[3]=(part[3]??1)*(1+(Math.random()*2-1)*.3*amount);count++;}}grid.ver++;updateGridArt(true);setGridStatus('Applied '+action+' to '+count+' anchored spaces only.');},insertIterations:ids=>insertIterations(ids,false),allowsMesh,inWorkspace,fitGrid,saveKey,saveState,restoreState,
   update(active,showMix){
+   if(!active||!showMix)editMode=false;
+   if((!active||!showMix)&&pickingSaveCell){pickingSaveCell=false;viewport.style.cursor='';selectCellButton?.setAttribute('aria-pressed','false');}
    const curvesOpen=active&&!showMix;
    positionInputSection(curvesOpen);
    if(curvesOpen&&!curvesWasOpen)refreshSaved();curvesWasOpen=curvesOpen;
@@ -1340,7 +1401,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,a
    manualDelete.disabled=!grid||!isolated||grid.locked.has(isolated)||e.isBusy();
    lockAll.disabled=!grid?.layouts.size||grid.locked.size===grid.layouts.size;
    unlockAll.disabled=!grid?.locked.size;
-   overlay.classList.toggle('hide-program-titles',isolationActive&&!titles.checked);
+   overlay.classList.toggle('hide-program-titles',e.scene.userData.spacesDisplay?.text===false||(isolationActive&&!titles.checked));
    if(active&&wasMix!==isolationActive){
     const scoped=e.selection().filter(inWorkspace);
     if(scoped.length!==e.selection().length)e.select(scoped);
