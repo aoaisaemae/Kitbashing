@@ -28,13 +28,13 @@ export function installWorkflow(e){
   if((active==='figures'&&name==='resolution')||(active==='resolution'&&name==='figures')){
    active=name;
    lastUI='';
-   e.cad().cancel();e.cad().leavePlane();update();e.select(e.selection());
+   e.cad().cancel();e.cad().leavePlane();update();e.select(e.selection());requestAnimationFrame(()=>e.fit());
    return;
   }
   e.cad().cancel();e.cad().leavePlane();e.select([]);active=name;lastUI='';update();if(name!=='floor-plates')selectContent();e.refresh();
   if(name==='project'&&!stagePieces('project').filter(m=>!m.userData.isMass).length&&stagePieces('figures').length)await buildProject();
   if(active==='project'&&stagePieces('project').filter(m=>!m.userData.isMass).length){const project=stagePieces('project').filter(m=>!m.userData.isMass)[0],outdated=project.userData.sourceSignature!==signature();say(outdated?'Figures changed. Update Project when you want to bring those edits across.':project.userData.projectReconstructed?'Closed Project was rebuilt to repair invalid surfaces. Review details and dimensions; source Figures are preserved.':'Closed Project mesh · source Figures remain editable in their tab.');}
-  e.fit();
+  requestAnimationFrame(()=>e.fit());
  }
  function replace(stage){e.select([]);for(const m of stagePieces(stage).filter(m=>!m.userData.isMass)){e.pieces().splice(e.pieces().indexOf(m),1);m.removeFromParent();m.geometry.dispose();m.material.dispose();}}
  async function run(url,data,transfers=[]){const token=++job;worker=new Worker(url,{type:'module'});e.busy(true);lastUI='';update();try{return await new Promise((resolve,reject)=>{rejectJob=reject;worker.onmessage=ev=>{if(token!==job)return;const d=ev.data;if(d.type==='progress')return say(d.text);if(d.error)reject(Error(d.error));else resolve(d);};worker.onerror=()=>reject(Error('The geometry operation could not complete. Your existing meshes are unchanged.'));worker.postMessage(data,transfers);});}finally{worker?.terminate();worker=null;rejectJob=null;e.busy(false);lastUI='';update();}}

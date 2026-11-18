@@ -1,9 +1,9 @@
-import {installSpacesWorkspace} from './spaces-workspace.js?v=operate-independent';
-import {installSavedPicker} from './saved-picker.js?v=operate-independent';
-import {installFloorAssembly} from './floor-assembly.js?v=operate-independent';
+import {installSpacesWorkspace} from './spaces-workspace.js?v=floor-flow-20261118';
+import {installSavedPicker} from './saved-picker.js?v=floor-flow-20261118';
+import {installFloorAssembly} from './floor-assembly.js?v=floor-flow-20261118';
 import * as T from './three.js';
 import {installOutline} from './composition-outline.js';
-import {installIterationWorkspace} from './iteration-workspace.js?v=operate-independent';
+import {installIterationWorkspace} from './iteration-workspace.js?v=floor-flow-20261118';
 
 export function installResolutionTools(e){
  const panel=document.createElement('aside'),constraints=document.createElement('aside');
@@ -19,7 +19,7 @@ export function installResolutionTools(e){
   const button=document.createElement('button');
   button.textContent=label;
   button.hidden=true;
-  button.onclick=()=>{chosen=['resolution','constraints','floor','properties','reality','floor-save'][i];};
+  button.onclick=()=>{chosen=['resolution','constraints','floor','properties','reality','floor-save'][i];requestAnimationFrame(()=>e.fit());};
   e.$('.panel-tabs').append(button);
   return button;
  });
@@ -45,7 +45,7 @@ export function installResolutionTools(e){
  const reality=document.createElement('aside');reality.className='resolution-panel';reality.hidden=true;reality.innerHTML='<div class="section"><h3>Reality</h3></div>';e.$('.control-content').append(reality);
  const iterationLabels=['01 / CURVES','02 / ANCHOR','03 / MIX','04 / RANKING','05 / SAVE'];
  const iterationPanels=['curves','anchor','mix','iteration-reality','iteration-save'];
- const iterationTabs=iterationLabels.map((label,i)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.hidden=true;b.onclick=()=>{chosen=iterationPanels[i];};e.$('.panel-tabs').append(b);return b;});
+ const iterationTabs=iterationLabels.map((label,i)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.hidden=true;b.onclick=()=>{chosen=iterationPanels[i];requestAnimationFrame(()=>e.fit());};e.$('.panel-tabs').append(b);return b;});
  const anchor=document.createElement('aside');anchor.className='resolution-panel';anchor.hidden=true;e.$('.control-content').append(anchor);
  const mix=document.createElement('aside');mix.className='resolution-panel';mix.hidden=true;e.$('.control-content').append(mix);
  const ranking=document.createElement('aside');ranking.className='resolution-panel';ranking.hidden=true;e.$('.control-content').append(ranking);
@@ -60,9 +60,9 @@ export function installResolutionTools(e){
  const spacesPanel=document.createElement('aside');spacesPanel.className='resolution-panel';spacesPanel.hidden=true;e.$('.control-content').append(spacesPanel);
  const spacesGroups=[['BASE','ANCHOR'],['FLOOR','ITERATE','SAVE'],['OPERATE','FLOORS'],['SITE']];let spacesChosen=0;
  const spacesPages=spacesGroups.map(groups=>{const page=document.createElement('div');page.className='section iteration-editor';for(const title of groups){const details=document.createElement('details');details.className='property-group iteration-curves-group';const summary=document.createElement('summary');summary.textContent=title;details.append(summary);const content=document.createElement('div');content.className='property-group-content';details.append(content);page.append(details);}spacesPanel.append(page);return page;});
- const spacesTabs=['01 / ASSIGN','02 / ASSEMBLE','03 / OPERATE','04 / SITE'].map((label,i)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.hidden=true;b.onclick=()=>{e.select([]);spacesChosen=i;};e.$('.panel-tabs').append(b);return b;});
+ const spacesTabs=['01 / ASSIGN','02 / ASSEMBLE','03 / FLOOR','04 / SITE'].map((label,i)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.hidden=true;b.onclick=()=>{e.select([]);spacesChosen=i;};e.$('.panel-tabs').append(b);return b;});
  const spacesLibrary=installIterations(e,document.createElement('div'),floors);
- const spaces=installSpacesWorkspace(e,spacesPanel,spacesPages,spacesLibrary,()=>spacesChosen);
+ const spaces=installSpacesWorkspace(e,spacesPanel,spacesPages,spacesLibrary,()=>spacesChosen,index=>{spacesChosen=index;e.select([]);});
  return {get spacesOperate(){return e.workflow().active==='spaces'&&spacesChosen>=2;},get site3D(){return e.workflow().active==='spaces'&&spaces.site3D();},exportRhino:floors.exportRhino,pick:(x,y)=>spaces.pick(x,y)||editor.pick(x,y)||floors.pick(x,y),allowsMesh:mesh=>spaces.allowsMesh(mesh)&&editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:mesh=>spaces.inWorkspace(mesh)&&editor.inWorkspace(mesh)&&floors.inWorkspace(mesh),fitGrid:()=>e.workflow().active==='spaces'?spaces.fitGrid():editor.fitGrid(),
   saveKey:()=>[chosen,editor.saveKey(),floors.save(),spaces.saveKey()],
   saveState:()=>({chosen,editor:editor.saveState(),floors:floors.save(),spaces:spaces.saveState(),spacesChosen}),

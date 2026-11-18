@@ -1,18 +1,18 @@
 import {addProgramText} from './rhino-program-text.js';
-import {installFolderLibrary} from './folder-library.js?v=operate-independent';
-import {installResolutionTools} from './resolution-tools.js?v=operate-independent';
+import {installFolderLibrary} from './folder-library.js?v=floor-flow-20261118';
+import {installResolutionTools} from './resolution-tools.js?v=floor-flow-20261118';
 import {installProjectMass} from './project-mass.js';
 import {installViewportControls} from './viewport-controls.js';
-import {installWorkflow} from './workflow-tabs.js?v=operate-independent';
+import {installWorkflow} from './workflow-tabs.js?v=floor-flow-20261118';
 import {installSplit} from './split-tools.js';
 import {organizeProperties} from './properties.js';
 import {installLayers} from './layers.js';
 import {describeShape,matchReferences} from './shape-features.js';
-import {installReferenceLayout} from './reference-layout.js?v=operate-independent';
-import {installCad} from './cad-tools.js?v=operate-independent';
+import {installReferenceLayout} from './reference-layout.js?v=floor-flow-20261118';
+import {installCad} from './cad-tools.js?v=floor-flow-20261118';
 import {quadMesh} from './quad-mesh.js';
 import * as T from 'three';
-import {OrbitControls} from './OrbitControls.js?v=operate-independent';
+import {OrbitControls} from './OrbitControls.js?v=floor-flow-20261118';
 import {TransformControls} from './TransformControls.js';
 import {OBJLoader} from './OBJLoader.js';
 import {splitParts} from './geometry.js';
@@ -36,7 +36,7 @@ function displayCamera(){
  programCamera.position.copy(camera.position);
  programCamera.up.copy(camera.up);
  if(plan){programCamera.up.set(0,0,-1);programCamera.position.copy(orbit.target).add(new T.Vector3(0,distance,0));}
- if(flat)programCamera.position.copy(orbit.target).add(new T.Vector3(0,0,distance));
+ if(flat){programCamera.up.set(0,1,0);programCamera.position.copy(orbit.target).add(new T.Vector3(0,0,distance));}
  programCamera.lookAt(orbit.target);programCamera.updateProjectionMatrix();programCamera.updateMatrixWorld(true);
  return programCamera;
 }
@@ -125,7 +125,8 @@ function fit(extra,only=false){
  const flat=programView()||layoutTools?.flat;
  const direction=flat?new T.Vector3(0,0,1):camera.position.clone().sub(orbit.target).normalize();
  if(!direction.lengthSq())direction.set(0,0,1);
- const right=new T.Vector3().crossVectors(camera.up,direction).normalize();
+ const framingUp=flat?new T.Vector3(0,1,0):camera.up;
+ const right=new T.Vector3().crossVectors(framingUp,direction).normalize();
  const up=new T.Vector3().crossVectors(direction,right);
  const tangent=Math.tan(T.MathUtils.degToRad(camera.fov/2));
  let distance=0,depth=0;
@@ -139,6 +140,7 @@ function fit(extra,only=false){
  distance=Math.max(distance,depth*1.05,0.01);
  camera.near=Math.max(.00001,Math.min(.1,(distance-depth)*.5));
  camera.far=Math.max(5000,distance*20);
+ if(flat)camera.up.set(0,1,0);
  orbit.target.copy(center);
  camera.position.copy(center).addScaledVector(direction,distance);
  camera.updateProjectionMatrix();
