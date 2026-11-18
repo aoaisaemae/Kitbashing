@@ -1,4 +1,4 @@
-import {planInterior} from './floor-specs.js?v=saved-selection-and-project';
+import {planInterior} from './floor-specs.js?v=anchor-cyan-curve-groups';
 const foot=304.8;
 const key=point=>point.map(v=>Math.round(v*10000)).join(',');
 export function sectionSegments(record,base,cut){

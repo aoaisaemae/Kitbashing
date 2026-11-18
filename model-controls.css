@@ -26,3 +26,5 @@
 
 .saved-picker-controls{border:1px solid #12343b;padding:10px;margin:10px 0}.saved-picker-checks{max-height:220px;overflow:auto}.saved-picker-checks .ranking-option{display:flex;gap:8px;align-items:center}.spec-total-area{border-top:1px solid #1b4950;padding-top:10px;font-weight:bold}
 .saved-picker-checks input[type=checkbox]{width:auto;margin:0;flex:none}
+
+.saved-picker{position:relative;margin:8px 0 14px;border:1px solid #16434b;background:#021116}.saved-picker>summary{cursor:pointer;color:#b4eef1;padding:12px;list-style-position:inside}.saved-picker-menu{padding:8px;border-top:1px solid #16434b}.saved-picker-tools{display:flex;gap:6px}.saved-picker-options{max-height:260px;overflow:auto;margin:8px 0}.saved-picker-row{display:flex;align-items:stretch;gap:4px;margin-bottom:3px}.saved-picker-row .saved-picker-option{flex:1;text-align:left;min-width:0;white-space:normal}.saved-picker-row .saved-picker-option[aria-selected=true]{border-color:#21e0ed;background:#07333b}.saved-picker-row .saved-picker-remove{width:32px;flex:none;color:#ff5284;padding:4px}.saved-picker-row button:focus-visible{outline:2px solid #21e0ed}.saved-picker-menu .hint{margin:8px 0}

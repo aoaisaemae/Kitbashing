@@ -1,4 +1,4 @@
-import {installSavedPicker} from './saved-picker.js';
+import {installSavedPicker} from './saved-picker.js?v=anchor-cyan-curve-groups';
 export function installFolderLibrary(drop,{importFiles,isBusy}){
  const panel=document.createElement('section');
  panel.className='folder-library';

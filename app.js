@@ -1,19 +1,18 @@
-import {installSharedLibrary} from './shared-library.js?v=add-all';
 import {addProgramText} from './rhino-program-text.js';
-import {installFolderLibrary} from './folder-library.js?v=saved-selection-and-project';
-import {installResolutionTools} from './resolution-tools.js?v=saved-selection-and-project';
+import {installFolderLibrary} from './folder-library.js?v=operate-independent';
+import {installResolutionTools} from './resolution-tools.js?v=operate-independent';
 import {installProjectMass} from './project-mass.js';
 import {installViewportControls} from './viewport-controls.js';
-import {installWorkflow} from './workflow-tabs.js?v=saved-selection-and-project';
+import {installWorkflow} from './workflow-tabs.js?v=operate-independent';
 import {installSplit} from './split-tools.js';
 import {organizeProperties} from './properties.js';
 import {installLayers} from './layers.js';
 import {describeShape,matchReferences} from './shape-features.js';
-import {installReferenceLayout} from './reference-layout.js?v=saved-selection-and-project';
-import {installCad} from './cad-tools.js';
+import {installReferenceLayout} from './reference-layout.js?v=operate-independent';
+import {installCad} from './cad-tools.js?v=operate-independent';
 import {quadMesh} from './quad-mesh.js';
 import * as T from 'three';
-import {OrbitControls} from './OrbitControls.js';
+import {OrbitControls} from './OrbitControls.js?v=operate-independent';
 import {TransformControls} from './TransformControls.js';
 import {OBJLoader} from './OBJLoader.js';
 import {splitParts} from './geometry.js';
@@ -23,7 +22,7 @@ let selected=null,serial=0,wire=false,busy=false;
 const selection=new Set(),selectionPivot=new T.Object3D(),selectionOutlines=[];let pivotMatrix=new T.Matrix4();
 const renderer=new T.WebGLRenderer({antialias:true,alpha:true,stencil:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x0b0d10);view.append(renderer.domElement);
 const scene=new T.Scene(),camera=new T.PerspectiveCamera(40,1,.1,5000);camera.position.set(110,105,150);
-const programView=()=>['resolution','iterations'].includes(workflowTools?.active);
+const programView=()=>['resolution','iterations','spaces'].includes(workflowTools?.active)&&!resolutionTools?.site3D;
 const floorView=()=>workflowTools?.active==='floor-plates';
 const unitsPerFoot=304.8;
 const programCamera=new T.OrthographicCamera();
@@ -94,7 +93,6 @@ function renderAssets(){collectionOptions($('#collectionFilter'),activeCollectio
 function addAsset(g,name,folderId=currentFolder==='*'?null:currentFolder||null){if(g.index)g=g.toNonIndexed();g.computeVertexNormals();g.computeBoundingBox();const asset={geometry:g,name,folderId:featureCategory(folderId,name),collection:folderFromFilename(name)};assets.push(asset);$('#cards .library-empty')?.remove();renderAsset(asset);updateLibraryCount();syncFolderControls();return asset;}
 async function importFiles(files){if(busy||splitTools?.active)return;const importStart=pieces.length;files=Array.from(files);for(const file of files){if(!/\.obj$/i.test(file.name)){say('Choose an OBJ file.');continue;}if(file.size>250*1024*1024){say('Please use OBJ files up to 250 MiB each.');continue;}try{const obj=new OBJLoader().parse(await file.text()),positions=[],parts=[];obj.updateMatrixWorld(true);obj.traverse(m=>{if(m.isMesh){const g=(m.geometry.index?m.geometry.toNonIndexed():m.geometry.clone()).applyMatrix4(m.matrixWorld);const vertices=g.attributes.position.array;for(const v of vertices)positions.push(v);for(const part of splitParts(vertices,true))parts.push(part);g.dispose();}});if(!positions.length)throw Error('No mesh faces found');const whole=new T.BufferGeometry();whole.setAttribute('position',new T.Float32BufferAttribute(positions,3));whole.computeBoundingBox();const center=whole.boundingBox.getCenter(new T.Vector3()),floor=whole.boundingBox.min.y;for(const [i,part] of parts.entries()){const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(part,3));g.translate(-center.x,-floor,-center.z);g.computeBoundingBox();const offset=g.boundingBox.getCenter(new T.Vector3());g.translate(-offset.x,-offset.y,-offset.z);const name=file.name.replace(/\.obj$/i,'')+(parts.length>1?' · part '+(i+1):'');const a=addAsset(g,name);a.offset=offset;addPiece(a);}whole.dispose();say(file.name+' imported · '+parts.length+' editable part(s)');}catch(e){say('Could not import '+file.name+': '+e.message);}}renderAssets();markEdited(pieces.slice(importStart));fit();}
 installFolderLibrary($('#drop'),{importFiles,isBusy:()=>busy||!!splitTools?.active});
-installSharedLibrary($('#drop'),{addPiece:addBundledPiece,finish:pieces=>{markEdited(pieces);fit();},canImport:()=>!busy&&!splitTools?.active&&workflowTools?.active==='figures'});
 async function exportLocalLibrary(button){
  if(busy||button.disabled)return;
  const library=assets.filter(asset=>!asset.mass);
@@ -217,7 +215,21 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)saveWorkspa
 transform.addEventListener('objectChange',syncGroup);
 // Empty-space drag creates a selection window; dragging over an object orbits.
 const marquee=document.createElement('div');marquee.className='selection-window';view.append(marquee);let pointerSelection=null;
+const lockedCommandTargets=new Set();
 function hitAt(e){const r=renderer.domElement.getBoundingClientRect(),ray=new T.Raycaster();const projection=displayCamera();ray.params.Line.threshold=projection.isOrthographicCamera?(projection.top-projection.bottom)/r.height*6:camera.position.distanceTo(orbit.target)/r.height*5;ray.setFromCamera(new T.Vector2((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1),projection);return ray.intersectObjects(pieces.filter(mesh=>canEdit(mesh)&&resolutionTools?.allowsMesh(mesh)!==false),false)[0]?.object||resolutionTools?.pick(e.clientX,e.clientY)||null;}
+renderer.domElement.addEventListener('pointerdown',event=>{
+ if(event.button!==0||busy||splitTools?.active||cadTools?.interceptsPointer)return;
+ const r=renderer.domElement.getBoundingClientRect(),projection=displayCamera(),ray=new T.Raycaster();ray.params.Line.threshold=projection.isOrthographicCamera?(projection.top-projection.bottom)/r.height*6:camera.position.distanceTo(orbit.target)/r.height*5;
+ ray.setFromCamera(new T.Vector2((event.clientX-r.left)/r.width*2-1,-(event.clientY-r.top)/r.height*2+1),projection);
+ const hit=ray.intersectObjects(pieces.filter(isVisible),false)[0]?.object;
+ if(!event.shiftKey&&!event.ctrlKey&&!event.metaKey)lockedCommandTargets.clear();
+ if(!hit?.userData.objectLocked)return;
+ event.preventDefault();event.stopImmediatePropagation();
+ if(event.ctrlKey||event.metaKey)lockedCommandTargets.delete(hit);else lockedCommandTargets.add(hit);
+ if(!event.shiftKey&&!event.ctrlKey&&!event.metaKey)setSelection([]);
+ say(lockedCommandTargets.size+' locked object(s) selected for Unlock.');
+},true);
+
 
 function cloneAtCurrentTransform(m,suffix=' copy'){const c=addPiece({geometry:m.geometry,name:m.name+suffix,curve:m.isLine});c.position.copy(m.position);c.quaternion.copy(m.quaternion);c.scale.copy(m.scale);c.material.color.copy(m.material.color);c.userData=structuredClone(m.userData);delete c.userData.groupId;c.updateMatrixWorld(true);return c;}
 let altHeld=false,altGizmo=null,directAlt=null;
@@ -340,10 +352,10 @@ $('#clearWorkspace').onclick=()=>{if(busy||splitTools?.active||transform.draggin
 transform.addEventListener('objectChange',()=>markEdited());$('#transforms').addEventListener('change',()=>{if(!busy)markEdited();});
 for(const id of ['duplicate','reset','mirror','pasteObjects','repair','fuse','arrange']){const element=$('#'+id),handler=element?.onclick;if(handler)element.onclick=async e=>{if(busy||splitTools?.active)return;const before=[...selection].map(m=>m.studioId);await handler(e);if(before.length&&before.join()!==[...selection].map(m=>m.studioId).join())previousSelectionIds=before;markEdited(id==='arrange'?pieces:[...selection]);};}
 
-cadTools=installCad({T,$,scene,camera,renderer,view,orbit,transform,pieces:()=>pieces,selection:()=>[...selection],select:setSelection,checkpoint,mark:markEdited,add:addPiece,clone:cloneAtCurrentTransform,say,canEdit,isVisible,blocked:()=>!!splitTools?.active||!!massTools?.picking,split:level=>splitTools?.start(level),flow:()=>massTools?.start(),programView,setModelMode,unitsPerFoot,commandBlocked:()=>!!splitTools?.active||!!massTools?.picking,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();}});
+cadTools=installCad({commandSelection:()=>[...new Set([...selection,...lockedCommandTargets])],T,$,scene,camera,renderer,view,orbit,transform,pieces:()=>pieces,selection:()=>[...selection],select:setSelection,checkpoint,mark:markEdited,add:addPiece,clone:cloneAtCurrentTransform,say,canEdit,isVisible,blocked:()=>!!splitTools?.active||!!massTools?.picking,split:level=>splitTools?.start(level),flow:()=>massTools?.start(),programView,setModelMode,unitsPerFoot,commandBlocked:()=>!!splitTools?.active||!!massTools?.picking,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();}});
 $('#wire').onclick=()=>{wire=!wire;cadTools.wire(wire);$('#wire').classList.toggle('active',wire);};$('#wire').title='Show quadrangular mesh edges';
 
-layoutTools=installReferenceLayout({$,program:programView,scene,camera,renderer,orbit,transform,grid,floor:floorView,fit,say,selection:()=>[...selection],pieces:()=>pieces.filter(isVisible),cad:()=>cadTools,boundsPieces:()=>pieces.filter(m=>inStage(m)&&(!layerTools||layerTools.isVisible(m))),blocked:()=>!!splitTools?.active,splitControl:()=>splitTools?.control,select:meshes=>{rememberSelection();setSelection(meshes);}});
+layoutTools=installReferenceLayout({site3D:()=>!!resolutionTools?.site3D,cameraMoving:()=>performance.now()-lastCameraMotion<160,$,program:programView,scene,camera,renderer,orbit,transform,grid,floor:floorView,fit,say,selection:()=>[...selection],pieces:()=>pieces.filter(isVisible),cad:()=>cadTools,boundsPieces:()=>pieces.filter(m=>inStage(m)&&(!layerTools||layerTools.isVisible(m))),blocked:()=>!!splitTools?.active,splitControl:()=>splitTools?.control,select:meshes=>{rememberSelection();setSelection(meshes);}});
 
 function inStage(m){return !workflowTools||workflowTools.inStage(m);}
 function canEdit(m){return !!m&&resolutionTools?.inWorkspace(m)!==false&&inStage(m)&&(!layerTools||layerTools.canEdit(m));}
@@ -426,19 +438,12 @@ $('#ungroupComposition').onclick=()=>{
 };
 
 
-workflowTools=installWorkflow({$,pieces:()=>pieces,select:setSelection,selection:()=>[...selection],add:addPiece,checkpoint,mark:markEdited,canEdit,layerVisible:m=>!layerTools||layerTools.isVisible(m),cad:()=>cadTools,split:()=>splitTools,locked:m=>layerTools.state(m).locked,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();},say,refresh:refreshStats,fit});
+workflowTools=installWorkflow({spacesStage:()=>resolutionTools?.spacesOperate?'spaces-operate':'spaces',$,pieces:()=>pieces,select:setSelection,selection:()=>[...selection],add:addPiece,checkpoint,mark:markEdited,canEdit,layerVisible:m=>!layerTools||layerTools.isVisible(m),cad:()=>cadTools,split:()=>splitTools,locked:m=>layerTools.state(m).locked,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();},say,refresh:refreshStats,fit});
 
 viewTools=installViewportControls({$,scene,camera,orbit,transform,selection:()=>[...selection],visible:isVisible,cad:()=>cadTools,say});
 
 massTools=installProjectMass({$,scene,camera,renderer,pieces:()=>pieces,assets:()=>assets,selection:()=>[...selection],select:setSelection,add:addPiece,canEdit,checkpoint,say,fit,thumbnail,renderFigures:renderAssets,layout:()=>layoutTools,workflow:()=>workflowTools,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();}});
 
-resolutionTools=installResolutionTools({$,scene,get camera(){return displayCamera();},renderer,orbit,transform,pieces:()=>pieces,selection:()=>[...selection],select:setSelection,add:addPiece,checkpoint,mark:markEdited,canEdit,locked:m=>layerTools.state(m).locked,layout:()=>layoutTools,workflow:()=>workflowTools,cad:()=>cadTools,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();},say,fit});
+resolutionTools=installResolutionTools({baseCamera:camera,$,scene,get camera(){return displayCamera();},renderer,orbit,transform,pieces:()=>pieces,selection:()=>[...selection],select:setSelection,add:addPiece,checkpoint,mark:markEdited,canEdit,locked:m=>layerTools.state(m).locked,layout:()=>layoutTools,workflow:()=>workflowTools,cad:()=>cadTools,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();},say,fit});
 
 
-
-function addBundledPiece(model,positions,first){
- if(busy||splitTools?.active||workflowTools?.active!=='figures')return false;
- const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.BufferAttribute(positions,3));
- geometry.userData.quadLayout=model.quadLayout;geometry.computeVertexNormals();geometry.computeBoundingBox();
- if(first)checkpoint();const mesh=addPiece({geometry,name:model.name,category:model.category,offset:model.offset?new T.Vector3().fromArray(model.offset):undefined});geometry.dispose();return mesh;
-}
