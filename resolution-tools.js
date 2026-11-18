@@ -1,8 +1,9 @@
-import {installSavedPicker} from './saved-picker.js';
-import {installFloorAssembly} from './floor-assembly.js?v=saved-selection-and-project';
+import {installSpacesWorkspace} from './spaces-workspace.js?v=operate-independent';
+import {installSavedPicker} from './saved-picker.js?v=operate-independent';
+import {installFloorAssembly} from './floor-assembly.js?v=operate-independent';
 import * as T from './three.js';
 import {installOutline} from './composition-outline.js';
-import {installIterationWorkspace} from './iteration-workspace.js?v=saved-selection-and-project';
+import {installIterationWorkspace} from './iteration-workspace.js?v=operate-independent';
 
 export function installResolutionTools(e){
  const panel=document.createElement('aside'),constraints=document.createElement('aside');
@@ -42,9 +43,10 @@ export function installResolutionTools(e){
  figureTab.onclick=()=>layout.tab('figure-resolution');
 
  const reality=document.createElement('aside');reality.className='resolution-panel';reality.hidden=true;reality.innerHTML='<div class="section"><h3>Reality</h3></div>';e.$('.control-content').append(reality);
- const iterationLabels=['01 / CURVES','02 / MIX','03 / RANKING','04 / SAVE'];
- const iterationPanels=['curves','mix','iteration-reality','iteration-save'];
+ const iterationLabels=['01 / CURVES','02 / ANCHOR','03 / MIX','04 / RANKING','05 / SAVE'];
+ const iterationPanels=['curves','anchor','mix','iteration-reality','iteration-save'];
  const iterationTabs=iterationLabels.map((label,i)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.hidden=true;b.onclick=()=>{chosen=iterationPanels[i];};e.$('.panel-tabs').append(b);return b;});
+ const anchor=document.createElement('aside');anchor.className='resolution-panel';anchor.hidden=true;e.$('.control-content').append(anchor);
  const mix=document.createElement('aside');mix.className='resolution-panel';mix.hidden=true;e.$('.control-content').append(mix);
  const ranking=document.createElement('aside');ranking.className='resolution-panel';ranking.hidden=true;e.$('.control-content').append(ranking);
  const savePanel=document.createElement('aside');savePanel.className='resolution-panel';savePanel.hidden=true;e.$('.control-content').append(savePanel);
@@ -54,19 +56,32 @@ export function installResolutionTools(e){
  const library=installIterations(e,panel.firstChild,floors);
  floors.setStore(library);
  floors.mount(panel.firstChild);
- const editor=installIterationWorkspace(e,panel.firstChild,mix,ranking,savePanel,library);
- return {exportRhino:floors.exportRhino,pick:(x,y)=>editor.pick(x,y)||floors.pick(x,y),allowsMesh:mesh=>editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:mesh=>editor.inWorkspace(mesh)&&floors.inWorkspace(mesh),fitGrid:editor.fitGrid,
-  saveKey:()=>[chosen,editor.saveKey(),floors.save()],
-  saveState:()=>({chosen,editor:editor.saveState(),floors:floors.save()}),
+ const editor=installIterationWorkspace(e,panel.firstChild,mix,ranking,savePanel,library,anchor,library.section);
+ const spacesPanel=document.createElement('aside');spacesPanel.className='resolution-panel';spacesPanel.hidden=true;e.$('.control-content').append(spacesPanel);
+ const spacesGroups=[['BASE','ANCHOR'],['FLOOR','ITERATE','SAVE'],['OPERATE','FLOORS'],['SITE']];let spacesChosen=0;
+ const spacesPages=spacesGroups.map(groups=>{const page=document.createElement('div');page.className='section iteration-editor';for(const title of groups){const details=document.createElement('details');details.className='property-group iteration-curves-group';const summary=document.createElement('summary');summary.textContent=title;details.append(summary);const content=document.createElement('div');content.className='property-group-content';details.append(content);page.append(details);}spacesPanel.append(page);return page;});
+ const spacesTabs=['01 / ASSIGN','02 / ASSEMBLE','03 / OPERATE','04 / SITE'].map((label,i)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.hidden=true;b.onclick=()=>{e.select([]);spacesChosen=i;};e.$('.panel-tabs').append(b);return b;});
+ const spacesLibrary=installIterations(e,document.createElement('div'),floors);
+ const spaces=installSpacesWorkspace(e,spacesPanel,spacesPages,spacesLibrary,()=>spacesChosen);
+ return {get spacesOperate(){return e.workflow().active==='spaces'&&spacesChosen>=2;},get site3D(){return e.workflow().active==='spaces'&&spaces.site3D();},exportRhino:floors.exportRhino,pick:(x,y)=>spaces.pick(x,y)||editor.pick(x,y)||floors.pick(x,y),allowsMesh:mesh=>spaces.allowsMesh(mesh)&&editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:mesh=>spaces.inWorkspace(mesh)&&editor.inWorkspace(mesh)&&floors.inWorkspace(mesh),fitGrid:()=>e.workflow().active==='spaces'?spaces.fitGrid():editor.fitGrid(),
+  saveKey:()=>[chosen,editor.saveKey(),floors.save(),spaces.saveKey()],
+  saveState:()=>({chosen,editor:editor.saveState(),floors:floors.save(),spaces:spaces.saveState(),spacesChosen}),
   restoreState(state){
    if(!state)return;
    previousStage=e.workflow().active;
    chosen=state.chosen;
    editor.restoreState(state.editor);
    floors.restore(state.floors);
+   spaces.restoreState(state.spaces);spacesChosen=state.spacesChosen||0;
   },
   update(){
   const stage=e.workflow().active,program=stage==='resolution',floor=stage==='floor-plates',iterations=stage==='iterations';
+  if(stage==='spaces'){
+   for(const button of e.$('.panel-tabs').querySelectorAll('button')){const i=spacesTabs.indexOf(button);button.hidden=i<0;button.classList.toggle('active',i===spacesChosen);}
+   for(const aside of e.$('.control-content').querySelectorAll(':scope > aside'))aside.hidden=aside!==spacesPanel;
+   spacesPages.forEach((page,i)=>page.hidden=i!==spacesChosen);library.update(false,false,false);floors.update(false,false,false);editor.update(false,false);spaces.update(true);return;
+  }
+  spacesPanel.hidden=true;spaces.update(false);
   if(stage!==previousStage){previousStage=stage;chosen=iterations?'curves':floor?'floor':'resolution';}
   outline.update();
   const showProperties=floor&&chosen==='properties';
@@ -77,10 +92,12 @@ export function installResolutionTools(e){
   reality.hidden=!floor||chosen!=='reality';
   floorSave.hidden=!floor||chosen!=='floor-save';
   ranking.hidden=!iterations||chosen!=='iteration-reality';
+  anchor.hidden=!iterations||chosen!=='anchor';
   mix.hidden=!iterations||chosen!=='mix';
   savePanel.hidden=!iterations||chosen!=='iteration-save';
   constraints.hidden=!program||chosen!=='constraints';
   for(const button of e.$('.panel-tabs').querySelectorAll('button')){
+   if(spacesTabs.includes(button)){button.hidden=true;continue;}
    if(button===figureTab){button.hidden=stage!=='figures';continue;}
    const iterationIndex=iterationTabs.indexOf(button);
    if(iterationIndex>=0){button.hidden=!iterations;button.classList.toggle('active',iterations&&chosen===iterationPanels[iterationIndex]);continue;}
@@ -88,10 +105,10 @@ export function installResolutionTools(e){
    button.hidden=iterations|| (index===-1?program||floor:index>=2?!floor:!program);
    if(index>=0)button.classList.toggle('active',(index>=2?floor:program)&&chosen===['resolution','constraints','floor','properties','reality','floor-save'][index]);
   }
-  if(program||floor||iterations)for(const aside of e.$('.control-content').querySelectorAll(':scope > aside'))if(aside!==panel&&aside!==constraints&&aside!==reality&&aside!==mix&&aside!==ranking&&aside!==savePanel&&aside!==floorSave)aside.hidden=aside!==inspector||!showProperties;
+  if(program||floor||iterations)for(const aside of e.$('.control-content').querySelectorAll(':scope > aside'))if(aside!==panel&&aside!==constraints&&aside!==reality&&aside!==anchor&&aside!==mix&&aside!==ranking&&aside!==savePanel&&aside!==floorSave)aside.hidden=aside!==inspector||!showProperties;
   library.update(program,floor,iterations);
   floors.update(floor&&chosen==='floor',floor&&chosen==='reality',showProperties);
-  editor.update(iterations,iterations&&['mix','iteration-reality','iteration-save'].includes(chosen));
+  editor.update(iterations,iterations&&['anchor','mix','iteration-reality','iteration-save'].includes(chosen));
  }};
 }
 
@@ -171,7 +188,7 @@ function installIterations(e,parent,floors){
    const floorLabel=document.createElement('label');floorLabel.className='field-label floor-assignment';floorLabel.textContent='Assign floor';floorLabel.append(floor);
    const place=()=>{
     const stage=e.workflow().active;
-    if(e.isBusy()||!['resolution','iterations','floor-plates'].includes(stage))return;
+    if(e.isBusy()||!['resolution','iterations','spaces','floor-plates'].includes(stage))return;
     const geometry=new T.BufferGeometry();
     const positions=item.curve?item.positions:legacyCenterline(item.positions);
     geometry.setAttribute('position',new T.BufferAttribute(positions,3));
@@ -242,7 +259,7 @@ function installIterations(e,parent,floors){
   }catch(error){report(error);}finally{saving=false;}
  };
  load().catch(report);
- return {add:item=>access('readwrite',store=>store.add(item)),list:()=>access('readonly',store=>store.getAll()),remove:id=>access('readwrite',store=>store.delete(id)),update(program,showFloor,iterations){
+ return {section,add:item=>access('readwrite',store=>store.add(item)),list:()=>access('readonly',store=>store.getAll()),remove:id=>access('readwrite',store=>store.delete(id)),update(program,showFloor,iterations){
   section.querySelector(':scope > h3:nth-of-type(2)').textContent=iterations?'Input curve':'Saved iterations';
   section.firstElementChild.hidden=iterations||!program;
   const bulk=list.querySelector(".curve-bulk-delete");if(bulk)bulk.hidden=!iterations;

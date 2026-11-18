@@ -1,10 +1,10 @@
-import {installSavedPicker} from './saved-picker.js';
+import {installSavedPicker} from './saved-picker.js?v=site-live';
 import {programBoundaryGap} from './program-continuity.js?v=piece-rotate-scale';
 import {downloadMatrix,illustratorMatrix,rhinoMatrix} from './matrix-files.js?v=rhino-program-text';
 import * as T from './three.js';
 import {traceCombinedContour} from './combined-contour.js';
 
-const foot=304.8,cyan='#21e0ed',ns='http://www.w3.org/2000/svg';
+const foot=304.8,anchorCyan='#70ffff',cyan='#21e0ed',ns='http://www.w3.org/2000/svg';
 const outlineCache=new WeakMap();
 
 export function splitCurvePaths(array){
@@ -61,7 +61,7 @@ function labelSpace(paths){
  }
  return best;
 }
-export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
+export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store,anchorPanel,inputSection,workspaceStage='iterations'){
  const controls=document.createElement('section');controls.className='iteration-editor';
  controls.innerHTML='<h3>Assign program</h3><label>Program name <input class="iteration-program" type="text" maxlength="80"></label><label>Floor <select class="iteration-floor"></select></label><h3>Square footage</h3><label>Target area (ft²) <input class="iteration-target" type="number" min="0" step="any"></label><p class="hint" aria-live="polite"></p><label>Iteration name <input class="iteration-group-name" type="text" maxlength="80"></label><button type="button">Save</button><p class="hint" role="status"></p>';
  curves.append(controls);
@@ -85,9 +85,9 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  const titles=mix.querySelector('.mix-program-titles');
  titles.onchange=()=>overlay.classList.toggle('hide-program-titles',isolationActive&&!titles.checked);
  let activeMesh=null,selectionKey='',visualKey='',grid=null,saving=false,opening=false,projectedRegions=[];
- const iterationMeshes=()=>e.pieces().filter(m=>m.isLine&&m.visible&&m.userData.workspaceStage==='iterations');
- const selected=()=>e.selection().filter(m=>m.isLine&&m.visible&&m.userData.workspaceStage==='iterations'&&e.canEdit(m));
- const inIterations=()=>e.workflow().active==='iterations';
+ const iterationMeshes=()=>e.pieces().filter(m=>m.isLine&&m.visible&&m.userData.workspaceStage===workspaceStage);
+ const selected=()=>e.selection().filter(m=>m.isLine&&m.visible&&m.userData.workspaceStage===workspaceStage&&e.canEdit(m));
+ const inIterations=()=>e.workflow().active===workspaceStage;
  function updateArea(){
   const value=activeMesh?curveArea(pathsOf(activeMesh),activeMesh.scale.x,activeMesh.scale.y):null;
   area.textContent=activeMesh?(value===null?'Open curves have no enclosed area.':'Curve area: '+value.toLocaleString(undefined,{maximumFractionDigits:6})+' ft²'):'Select one curve to edit its program and area.';
@@ -125,7 +125,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   saving=true;save.disabled=true;
   try{
    const members=meshes.map(mesh=>({
-    name:mesh.name,positions:mesh.geometry.attributes.position.array.slice(),position:mesh.position.toArray(),rotation:mesh.quaternion.toArray(),scale:mesh.scale.toArray(),color:mesh.material.color.getHex(),program:mesh.userData.program||'',floorLevel:mesh.userData.floorLevel||1,area:curveArea(pathsOf(mesh),mesh.scale.x,mesh.scale.y)
+    name:mesh.name,positions:mesh.geometry.attributes.position.array.slice(),position:mesh.position.toArray(),rotation:mesh.quaternion.toArray(),scale:mesh.scale.toArray(),color:mesh.material.color.getHex(),program:mesh.userData.program||'',floorLevel:mesh.userData.floorLevel||1,anchored:Boolean(mesh.userData.iterationAnchor),area:curveArea(pathsOf(mesh),mesh.scale.x,mesh.scale.y)
    }));
    const id=crypto.randomUUID();await store.add({id,name:label,members,savedAt:Date.now()});
    name.value='';status.textContent='Saved '+label+' · '+members.length+' '+(members.length===1?'curve.':'curves.');
@@ -134,10 +134,64 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   finally{saving=false;save.disabled=!selected().length;}
  };
  const curvesLibrary=document.createElement('section');curvesLibrary.className='saved-curves-reinsert';
- curvesLibrary.innerHTML='<h3>Reinsert iteration</h3><label>Saved iteration <select class="curves-iteration-picker" aria-label="Saved iteration to reinsert"></select></label><button class="curves-iteration-insert" type="button" disabled>Insert iteration</button>';
+ curvesLibrary.innerHTML='<h3>Save / insert iteration</h3><label>Saved iteration <select class="curves-iteration-picker" aria-label="Saved iteration to reinsert"></select></label><button class="curves-iteration-insert" type="button" disabled>Insert iteration</button>';
  controls.append(curvesLibrary);
- const curvesPicker=curvesLibrary.querySelector('select'),curvesInsert=curvesLibrary.querySelector('button');
+ const savedLabel=curvesLibrary.querySelector('label');savedLabel.before(name.closest('label'),save,status);save.textContent='Save iteration';
+ const curvesPicker=curvesLibrary.querySelector('select'),curvesInsert=curvesLibrary.querySelector('.curves-iteration-insert');
+ const inputDetails=document.createElement('details');inputDetails.className='property-group iteration-curves-group iteration-input-group';
+ inputDetails.innerHTML='<summary>BASE</summary><div class="property-group-content"></div>';
+ const saveDetails=document.createElement('details');saveDetails.className='property-group iteration-curves-group iteration-save-group';
+ saveDetails.innerHTML='<summary>SAVE</summary><div class="property-group-content"></div>';
+ const inputContent=inputDetails.lastElementChild,saveContent=saveDetails.lastElementChild;
+ for(const child of [...controls.children])if(child!==curvesLibrary)inputContent.append(child);
+ curvesLibrary.querySelector('h3').hidden=true;saveContent.append(curvesLibrary);controls.append(inputDetails,saveDetails);
+ const inputHome=inputSection?document.createComment('shared curve input library'):null;
+ if(inputHome)inputSection.after(inputHome);
+ function positionInputSection(inCurves){
+  if(!inputSection)return;
+  if(inCurves&&inputSection.parentElement!==inputContent)inputContent.prepend(inputSection);
+  else if(!inCurves&&inputSection.parentNode!==inputHome.parentNode)inputHome.before(inputSection);
+ }
+
  curvesInsert.onclick=()=>insertSaved(saved.find(record=>record.id===curvesPicker.value),false);
+
+ let anchorPicker,anchorSpace,anchorSelection=null,anchorOptionsKey='';
+ if(anchorPanel){
+  anchorPanel.innerHTML='<div class="section iteration-editor"><h3>Anchor</h3><label>Saved iteration <select class="anchor-iteration-picker"></select></label><button class="anchor-iteration-insert" type="button">Insert</button><h3>Choose space</h3><label>Anchoring space <select class="anchor-space"><option value="">None</option></select></label><p class="anchor-status hint" role="status"></p></div>';
+  anchorPicker=anchorPanel.querySelector('select');anchorSpace=anchorPanel.querySelector('.anchor-space');
+  anchorSpace.onchange=()=>{
+   e.checkpoint();const choice=anchorSpace.value;
+   const mesh=e.pieces().find(mesh=>mesh.studioId===choice);
+   anchorSelection={iterationId:anchorPicker.value,index:choice?(mesh?anchorMeshes().indexOf(mesh):Number(choice.split(':').at(-1))):-1};
+   for(const part of e.pieces())if(part.userData.workspaceStage===workspaceStage)part.userData.iterationAnchor=part===mesh;
+   if(grid){grid.seed.parts.forEach((part,i)=>part.anchored=Boolean(grid.seed.meshes[i]?.userData.iterationAnchor));grid.ver++;}
+   anchorOptionsKey='';visualKey='';e.mark(mesh?[mesh]:[]);
+   anchorPanel.querySelector('.anchor-status').textContent=choice?'Anchoring '+anchorSpace.selectedOptions[0].textContent+'.':'No anchoring space selected.';
+  };
+  installSavedPicker(anchorPicker,{insertButton:anchorPanel.querySelector('button'),status:anchorPanel.querySelector('.anchor-status'),isBusy:e.isBusy,onInsert:ids=>{if(workspaceStage==='spaces'){
+ if(!anchorSpace.value){anchorPanel.querySelector('.anchor-status').textContent='Choose an anchoring space first.';return;}
+ const record=saved.find(item=>item.id===anchorPicker.value),index=anchorSpace.value.startsWith('saved:')?Number(anchorSpace.value.split(':')[1]):anchorMeshes().findIndex(m=>m.studioId===anchorSpace.value);
+ const chosen=e.pieces().find(m=>m.studioId===anchorSpace.value)||anchorMeshes()[index]||e.pieces().find(m=>m.userData.workspaceStage===workspaceStage&&m.userData.program===record?.members[index]?.program);
+ if(index<0&&!chosen){anchorPanel.querySelector('.anchor-status').textContent='Choose an anchoring space first.';return;}
+ e.checkpoint();anchorSelection={iterationId:anchorPicker.value,index};for(const m of e.pieces())if(m.userData.workspaceStage===workspaceStage)m.userData.iterationAnchor=m===chosen;
+ if(grid){grid.seed.parts.forEach((part,i)=>part.anchored=grid.seed.meshes[i]===chosen);grid.ver++;}
+ visualKey='';anchorOptionsKey='';e.mark(chosen?[chosen]:[]);anchorPanel.querySelector('.anchor-status').textContent='Anchored '+(chosen?.userData.program||record?.members[index]?.program||'space')+'.';return;
+ }insertIterations(ids,true);grid=null;gridArt=null;isolated=null;selectedPiece=null;clearRanking();visualKey='';anchorPanel.querySelector('.anchor-status').textContent='Inserted '+ids.length+' saved iterations.';},onDelete:async ids=>{await deleteIterations(ids);anchorPanel.querySelector('.anchor-status').textContent='Deleted '+ids.length+' saved iterations.';}});
+ }
+
+ function anchorMeshes(){
+  const matches=e.pieces().filter(mesh=>mesh.userData.workspaceStage===workspaceStage&&(mesh.userData.savedIterationId===anchorPicker?.value||mesh.userData.sourceIterationId===anchorPicker?.value));
+  const group=matches.at(-1)?.userData.groupId;return group?matches.filter(mesh=>mesh.userData.groupId===group):matches;
+ }
+ function refreshAnchorSpaces(){
+  if(!anchorSpace)return;
+  const meshes=anchorMeshes(),record=saved.find(item=>item.id===anchorPicker.value);
+  const choices=meshes.length?meshes.map((mesh,i)=>({value:mesh.studioId,name:mesh.userData.program||mesh.name,anchored:mesh.userData.iterationAnchor,index:i})):record?.members.map((member,i)=>({value:'saved:'+i,name:member.program||member.name,anchored:member.anchored,index:i}))||[];
+  const key=JSON.stringify([anchorPicker.value,anchorSelection,choices]);if(key===anchorOptionsKey)return;anchorOptionsKey=key;
+  anchorSpace.replaceChildren(new Option('None',''),...choices.map(choice=>new Option(choice.name,choice.value)));
+  const pending=anchorSelection?.iterationId===anchorPicker.value?choices.find(choice=>choice.index===anchorSelection.index):null;
+  anchorSpace.value=(anchorSelection?.iterationId===anchorPicker.value?pending:choices.find(choice=>choice.anchored))?.value||'';
+ }
  let curvesWasOpen=false;
  const deleteSaved=mix.querySelector('.delete-saved-iteration');
  let deleting=false,saved=[],mixWasOpen=false;
@@ -163,6 +217,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
    if(saved.some(item=>item.id===previous))curvesPicker.value=previous;
    else if(saved.some(item=>item.id===preferred))curvesPicker.value=preferred;
    if(!saved.length)curvesPicker.add(new Option('No saved iterations',''));
+   if(anchorPicker){const previous=anchorPicker.value;anchorPicker.replaceChildren(...saved.map(item=>new Option(item.name,item.id)));if(saved.some(item=>item.id===previous))anchorPicker.value=previous;refreshAnchorSpaces();}
    curvesInsert.disabled=!saved.length;
    insert.disabled=!saved.length;
    deleteSaved.disabled=deleting||!saved.length;
@@ -180,16 +235,16 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   opening=true;
   try{
    const group=crypto.randomUUID();e.checkpoint();
-   const meshes=item.members.map(member=>{
+   const meshes=item.members.map((member,memberIndex)=>{
     const geometry=new T.BufferGeometry();
     geometry.setAttribute('position',new T.BufferAttribute(member.positions.slice(),3));geometry.computeBoundingBox();
-    const mesh=e.add({geometry,name:member.name,curve:true,offset:new T.Vector3().fromArray(member.position),stage:'iterations'});
+    const mesh=e.add({geometry,name:member.name,curve:true,offset:new T.Vector3().fromArray(member.position),stage:workspaceStage});
     geometry.dispose();
     mesh.quaternion.fromArray(member.rotation);mesh.scale.fromArray(member.scale);mesh.material.color.setHex(member.color);
-    Object.assign(mesh.userData,{groupId:group,...(forMix?{savedIterationId:item.id}:{sourceIterationId:item.id}),program:member.program,floorLevel:member.floorLevel});
+    Object.assign(mesh.userData,{groupId:group,...(forMix?{savedIterationId:item.id}:{sourceIterationId:item.id}),program:member.program,floorLevel:member.floorLevel,iterationAnchor:anchorSelection?.iterationId===item.id?anchorSelection.index===memberIndex:Boolean(member.anchored)});
     return mesh;
    });
-   e.select(meshes);e.mark(meshes);e.fit();mixStatus.textContent=status.textContent='Inserted '+item.name+'.';
+   e.select(meshes);e.mark(meshes);e.fit();refreshAnchorSpaces();mixStatus.textContent=status.textContent='Inserted '+item.name+'.';
   }finally{opening=false;}
  };
 
@@ -279,6 +334,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   if(grid.locked.has(index)||(mesh&&!e.canEdit(mesh))){
    setGridStatus('Unlock this variation before moving its pieces.');return;
   }
+  if((index||workspaceStage==='spaces')&&(grid.seed.parts[part]?.anchored||mesh?.userData.iterationAnchor)){setGridStatus('Choose another anchoring space or None before editing this piece.');return;}
   selectedPiece={index,part};updatePieceControls();
   updateGridArt(true);
   e.select([]);
@@ -679,7 +735,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   return true;
  }
  showGridButton.onclick=ranking.querySelector('.rank-show-grid').onclick=fitGrid;
- const inWorkspace=mesh=>!inIterations()||mesh.userData.workspaceStage!=='iterations'||Boolean(mesh.userData.savedIterationId)===isolationActive;
+ const inWorkspace=mesh=>!inIterations()||mesh.userData.workspaceStage!==workspaceStage||!!mesh.userData.realitySpace||(workspaceStage==='spaces'&&!isolationActive)||Boolean(mesh.userData.savedIterationId)===isolationActive;
  const allowsMesh=mesh=>inWorkspace(mesh)&&(!isolationActive||isolated===null||(isolated===0&&grid.seed.meshes.includes(mesh)));
  function gridBounds(){
   if(!grid)return new T.Box3();
@@ -692,7 +748,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   if(!first)return null;
   const meshes=visible.filter(mesh=>mesh.userData.groupId===first.userData.groupId);
   const source=meshes.map(mesh=>({
-   positions:mesh.geometry.attributes.position.array,position:mesh.position.toArray(),rotation:mesh.quaternion.toArray(),scale:mesh.scale.toArray(),program:mesh.userData.program
+   positions:mesh.geometry.attributes.position.array,position:mesh.position.toArray(),rotation:mesh.quaternion.toArray(),scale:mesh.scale.toArray(),program:mesh.userData.program,anchored:Boolean(mesh.userData.iterationAnchor)
   }));
   const bounds=new T.Box3();
   const parts=source.map(member=>{
@@ -703,7 +759,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
    })}));
    const center=box.getCenter(new T.Vector3());
    const radius=paths.reduce((largest,path)=>path.points.reduce((max,[x,y])=>Math.max(max,Math.hypot(x-center.x,y-center.y)),largest),0);
-   return {paths,center,radius,box,program:member.program};
+   return {paths,center,radius,box,program:member.program,anchored:member.anchored};
   }).filter(part=>part.paths.length);
   if(bounds.isEmpty()||!parts.length)return null;
   return {parts,meshes,center:bounds.getCenter(new T.Vector3()),size:bounds.getSize(new T.Vector3())};
@@ -809,13 +865,15 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
     shape.id=id;shape.setAttribute('d',paths.map(({points,closed})=>'M'+points.map(([x,y])=>[x-seed.center.x,y-seed.center.y].join(',')).join(' L')+(closed?' Z':'')).join(' '));
     shape.setAttribute('stroke','var(--variation-stroke, '+cyan+')');shape.setAttribute('stroke-width','1');shape.setAttribute('vector-effect','non-scaling-stroke');
     shape.setAttribute('fill',program&&paths.every(p=>p.closed)?'var(--variation-fill, #21e0ed28)':'none');shape.setAttribute('fill-rule','evenodd');defs.append(shape);
-    return {id,center,program,radius,label:program?labelSpace(paths):null};
+    return {id,center,program,radius,anchored:seed.parts[i].anchored,label:program?labelSpace(paths):null};
    });
+   const anchorPart=parts.find(part=>part.anchored);
    const total=mixed?rows*columns:1;
    for(let index=1;index<total;index++){
     if(grid.deleted.has(index))continue;
     const row=Math.floor(index/columns),column=index%columns;
     const cx=left+(column+.5)*cell,cy=top-(row+.5)*cell;
+    const anchorX=anchorPart?anchorPart.center.x-seed.center.x:0,anchorY=anchorPart?anchorPart.center.y-seed.center.y:0,originX=cx+anchorX,originY=cy+anchorY;
     const strength=(row+column)/Math.max(1,rows+columns-2);
     const order=parts.map((_,i)=>i);
     for(let i=order.length-1;i>0;i--){
@@ -835,31 +893,35 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
     const rearrange=strength>.25&&index%3!==0;
     const turn=quarterTurn*Math.PI/2;
     const cosTurn=Math.cos(turn),sinTurn=Math.sin(turn);
-    for(const [i,{id,center,program,radius,label:space}] of parts.entries()){
+    for(const [i,{id,center,program,radius,label:space,anchored}] of parts.entries()){
      const slot=parts[order[i]].center,ox=center.x-seed.center.x,oy=center.y-seed.center.y;
      const limit=Math.max(0,cell/2-radius-cell*.025);
+     const relativeX=ox-anchorX,relativeY=oy-anchorY;
      const blend=(a,b)=>a+(b*spread*(1.45-.9*overlap)-a)*strength;
      const drift=cell*.36*strength**1.2*(1.4-centrality);
      const direction=phase+i*2*Math.PI/parts.length;
      const reach=.28+rhythm*(i%2===0?.72:-.20);
      const offset=cell*.12*strength*(1-centrality);
-     const freeX=blend(ox,slot.x-seed.center.x)+Math.cos(direction)*drift*reach+Math.cos(phase)*offset;
-     const axialX=ox*.22+Math.cos(direction)*drift*reach*.15;
-     const nextX=cx+T.MathUtils.clamp(T.MathUtils.lerp(freeX,axialX,centrality),-limit,limit);
-     const freeY=blend(oy,slot.y-seed.center.y)+Math.sin(direction)*drift*reach+Math.sin(phase)*offset;
-     const axialY=oy*.78+Math.sin(direction)*drift*reach*.25;
-     const nextY=cy+T.MathUtils.clamp(T.MathUtils.lerp(freeY,axialY,centrality),-limit,limit);
+     const freeX=blend(relativeX,slot.x-seed.center.x-anchorX)+Math.cos(direction)*drift*reach+Math.cos(phase)*offset;
+     const axialX=relativeX*.22+Math.cos(direction)*drift*reach*.15;
+     const nextX=originX+T.MathUtils.clamp(T.MathUtils.lerp(freeX,axialX,centrality),-limit,limit);
+     const freeY=blend(relativeY,slot.y-seed.center.y-anchorY)+Math.sin(direction)*drift*reach+Math.sin(phase)*offset;
+     const axialY=relativeY*.78+Math.sin(direction)*drift*reach*.25;
+     const nextY=originY+T.MathUtils.clamp(T.MathUtils.lerp(freeY,axialY,centrality),-limit,limit);
      const nextAngle=(rotations[i]*(.35+.65*rhythm))*strength**1.25*(1-.8*centrality);
      const [compactX,compactY]=(rearrange?grid.packed:grid.compact)[i];
      const looseX=compactX*(rearrange?(row%2?-.9:.9):1);
      const looseY=compactY*(rearrange?(column%2?-.9:.9):1);
      const looseAngle=(quarterTurn===3?-1:quarterTurn)*90+(rearrange?rotations[i]*strength*.85:0);
      const overlapBlend=overlap*.72;
-     const xMix=T.MathUtils.lerp(cx+cosTurn*looseX-sinTurn*looseY,nextX,overlapBlend);
-     const yMix=T.MathUtils.lerp(cy+sinTurn*looseX+cosTurn*looseY,nextY,overlapBlend);
+     const xMix=T.MathUtils.clamp(T.MathUtils.lerp(originX+cosTurn*(looseX-anchorX)-sinTurn*(looseY-anchorY),nextX,overlapBlend),cx-limit,cx+limit);
+     const yMix=T.MathUtils.clamp(T.MathUtils.lerp(originY+sinTurn*(looseX-anchorX)+cosTurn*(looseY-anchorY),nextY,overlapBlend),cy-limit,cy+limit);
+     if(anchored&&((!restoreLayouts&&!grid.locked.has(index))||!layout[i]))layout[i]=[cx+ox,cy+oy,0,1];
      const [x,y,angle,scale=1]=layout[i]??(layout[i]=[xMix,yMix,T.MathUtils.lerp(looseAngle,nextAngle,overlapBlend)]);
      const use=svg('use');use.setAttribute('href','#'+id);use.dataset.variationPiece='';
      use.setAttribute('transform','translate('+x+','+y+') rotate('+angle+') scale('+scale+') translate('+(-ox)+','+(-oy)+')');
+     use.dataset.anchoredPiece=String(Boolean(anchored));
+     if(anchored){use.style.setProperty('--variation-stroke',anchorCyan);use.style.setProperty('--variation-fill','#37ffff66');use.style.strokeWidth='2.5';}
      const selected=isolated===index&&selectedPiece?.index===index&&selectedPiece.part===i;
      if(selected){
       use.style.setProperty('--variation-stroke','#dc24f4');
@@ -872,6 +934,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
       const radians=angle*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
       const dx=(space.x-center.x)*scale,dy=(space.y-center.y)*scale;
       const label=fittedTitle(program,space.radius*scale,cell*.035);
+      if(anchored)label.style.fill=anchorCyan;
       if(selected)label.style.fill='#dc24f4';
       label.setAttribute('transform','translate('+(x+c*dx-s*dy)+','+(y+s*dx+c*dy)+') scale(1,-1)');
       group.append(label);
@@ -895,7 +958,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  function redraw(showGrid){
   const meshes=iterationMeshes().filter(allowsMesh),selectedSet=new Set(selected()),camera=e.camera,w=viewport.clientWidth,h=viewport.clientHeight;
   for(const mesh of meshes)mesh.updateWorldMatrix(true,false);
-  const key=JSON.stringify([pieceMode,selectedPiece,w,h,camera.projectionMatrix.elements,camera.matrixWorld.elements,showGrid?grid?.ver:null,isolated,meshes.map(m=>[m.uuid,m.geometry.uuid,m.userData.program,m.matrixWorld.elements,selectedSet.has(m)])]);
+  const key=JSON.stringify([pieceMode,selectedPiece,w,h,camera.projectionMatrix.elements,camera.matrixWorld.elements,showGrid?grid?.ver:null,isolated,meshes.map(m=>[m.uuid,m.geometry.uuid,m.userData.program,m.userData.iterationAnchor,m.matrixWorld.elements,selectedSet.has(m)])]);
   if(key===visualKey)return;
   visualKey=key;overlay.replaceChildren();projectedRegions=[];
   if(!w||!h)return;
@@ -921,34 +984,36 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
     if(outlined&&!outline)drawVariationOutline(index,cell);
     if(!outlined)outline?.remove();
     const dimPieces=Boolean(cell.querySelector('[data-variation-outline]'));
-    for(const piece of cell.querySelectorAll('[data-variation-piece]'))piece.style.opacity=piece.dataset.selectedPiece==='true'?'1':dimPieces?'0.28':'';
+    for(const piece of cell.querySelectorAll('[data-variation-piece]'))piece.style.opacity=(piece.dataset.selectedPiece==='true'||piece.dataset.anchoredPiece==='true')?'1':dimPieces?'0.28':'';
    }
    gridArt.querySelector(':scope > path').style.display=isolated===null?'':'none';
    overlay.append(gridArt);
    if(isolated!==null){const box=cellBounds(isolated);path(command([point(box.min.x,box.min.y),point(box.max.x,box.min.y),point(box.max.x,box.max.y),point(box.min.x,box.max.y)])+' Z','#21e0ed55',1);}
   }
   for(const mesh of meshes){
-   const focused=selectedSet.has(mesh),label=mesh.userData.program;
+   const focused=selectedSet.has(mesh),label=mesh.userData.program,anchored=Boolean(mesh.userData.iterationAnchor);
    const selectedOriginal=isolationActive&&isolated===0&&selectedPiece?.index===0&&grid.seed.meshes[selectedPiece.part]===mesh;
-   if(!focused&&!label&&!(isolationActive&&isolated===0&&grid.seed.meshes.includes(mesh)))continue;
+   if(!focused&&!label&&!anchored&&!(isolationActive&&isolated===0&&grid.seed.meshes.includes(mesh)))continue;
    const paths=pathsOf(mesh).map(({points,closed})=>({points:points.map(([x,y])=>point(x,y,mesh.matrixWorld)),closed}));
    if(label){
     const closed=paths.filter(p=>p.closed);
-    if(closed.length){path(closed.map(p=>command(p.points)+' Z').join(' '),'none',0,selectedOriginal?'#dc24f450':'#21e0ed28');projectedRegions.push({mesh,paths:closed});}
+    if(closed.length){path(closed.map(p=>command(p.points)+' Z').join(' '),'none',0,selectedOriginal?'#dc24f450':anchored?'#37ffff66':'#21e0ed28');projectedRegions.push({mesh,paths:closed});}
     const space=labelSpace(closed);
     if(space){
      const text=fittedTitle(label,space.radius,12);
+     if(anchored)text.style.fill=anchorCyan;
      if(selectedOriginal)text.style.fill='#dc24f4';
      text.setAttribute('x',space.x);text.setAttribute('y',space.y);
      overlay.append(text);
     }
    }
+   if(anchored&&paths.length){path(paths.map(p=>command(p.points)+(p.closed?' Z':'')).join(' '),anchorCyan,2.5);overlay.lastElementChild.dataset.anchoredSource='true';}
    if(isolationActive&&isolated===0&&grid.seed.meshes.includes(mesh)){
     const part=grid.seed.meshes.indexOf(mesh);
     pieceHits(overlay,paths.map(p=>command(p.points)+(p.closed?' Z':'')).join(' '),0,part,mesh);
     if(selectedPiece?.index===0&&selectedPiece.part===part)path(paths.map(p=>command(p.points)+(p.closed?' Z':'')).join(' '),'#dc24f4',2.5);
    }
-   if(focused&&paths.length)path(paths.map(p=>command(p.points)+(p.closed?' Z':'')).join(' '),cyan,2.5);
+   if(focused&&paths.length)path(paths.map(p=>command(p.points)+(p.closed?' Z':'')).join(' '),anchored?anchorCyan:cyan,2.5);
   }
   if(isolationActive&&selectedPiece&&selectedPiece.index===isolated&&!grid.locked.has(isolated)){
    const {index,part}=selectedPiece,mesh=index===0?grid.seed.meshes[part]:null;
@@ -978,18 +1043,19 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  });
  function saveKey(){
   return [grid?.ver,isolated,[...(grid?.locked||[])],[...(grid?.deleted||[])],[...ranked],cornerState(filletsByLayout),
-   mixInputs.map(input=>input.value),titles.checked,showOutlines,showPoints,criteria.map(input=>input.checked),cornerState(restoredByLayout),continuityRows.map(row=>row.map(select=>select.value)),continuityChecks.map(input=>input.checked)];
+   mixInputs.map(input=>input.value),titles.checked,showOutlines,showPoints,criteria.map(input=>input.checked),cornerState(restoredByLayout),continuityRows.map(row=>row.map(select=>select.value)),continuityChecks.map(input=>input.checked),anchorSelection];
  }
  function saveState(){
-  const state={key:saveKey(),status:mixStatus.textContent};
+  const state={key:saveKey(),status:mixStatus.textContent,anchorSelection:anchorSelection?{...anchorSelection}:null};
   if(grid){
    const {meshes,...seed}=grid.seed;
-   state.grid={...grid,seed:{...seed,meshIds:meshes.map(mesh=>mesh.studioId)},layouts:[...grid.layouts],locked:[...grid.locked],deleted:[...grid.deleted]};
+   state.grid={...grid,seed:{...seed,parts:seed.parts.map(part=>({...part})),meshIds:meshes.map(mesh=>mesh.studioId)},layouts:[...grid.layouts],locked:[...grid.locked],deleted:[...grid.deleted]};
   }
   return state;
  }
  function restoreState(state){
   if(!state?.key)return;
+  anchorSelection=state.anchorSelection||null;anchorOptionsKey='';
   grid=null;gridArt=null;isolated=null;clearRanking();
   const [,cell,, ,results,fillets,values,showTitles,outlines,points,checked,restored=[],continuity=[],continuityEnabled=[]]=state.key;
   mixInputs.forEach((input,i)=>{if(values[i]!=null)input.value=values[i];});
@@ -1005,6 +1071,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
    const meshes=meshIds.map(id=>e.pieces().find(mesh=>mesh.studioId===id)).filter(Boolean);
    if(meshes.length===meshIds.length){
     grid={...state.grid,seed:{...seed,meshes},layouts:new Map(state.grid.layouts),locked:new Set(state.grid.locked),deleted:new Set(state.grid.deleted)};
+    meshes.forEach((mesh,i)=>mesh.userData.iterationAnchor=Boolean(seed.parts[i]?.anchored));
     isolated=cell;
     for(const index of results)if(grid.layouts.has(index))ranked.add(index);
     for(const [index,ids] of fillets){
@@ -1033,7 +1100,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
    return grid.seed.meshes.filter(mesh=>e.pieces().includes(mesh)).flatMap(mesh=>{
     mesh.updateMatrixWorld(true);
     return pathsOf(mesh).map(({points,closed})=>({
-     ...kinds,closed,name:mesh.userData.program||mesh.name,program:mesh.userData.program||'',
+     ...kinds,closed,name:mesh.userData.program||mesh.name,program:mesh.userData.program||'',anchored:Boolean(mesh.userData.iterationAnchor),
      points:points.map(([x,y])=>fromPoint(new T.Vector3(x,y,0).applyMatrix4(mesh.matrixWorld).toArray()))
     }));
    });
@@ -1044,7 +1111,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
    const [x,y,degrees,scale=1]=layout[i],radians=degrees*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
    const program=grid.seed.parts[i].program||'';
    return paths.map(({points,closed})=>({
-    ...kinds,closed,program,name:program||label,
+    ...kinds,closed,program,name:program||label,anchored:Boolean(grid.seed.parts[i].anchored),
     points:points.map(([px,py])=>{
      const dx=(px-center.x)*scale,dy=(py-center.y)*scale;
      return fromPoint([x+c*dx-s*dy,y+s*dx+c*dy]);
@@ -1088,16 +1155,16 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   const outline=matrixCellOutline(index,true);
   const curves=matrixCell(index,true);
   if(outline)curves.push(outline);
-  return curves.flatMap(({points,closed,program,name})=>{
+  return curves.flatMap(({points,closed,program,name,anchored})=>{
    const segments=[];
    for(let i=1;i<points.length;i++)segments.push(...points[i-1],0,...points[i],0);
    if(closed&&points.length>2&&points[0].some((value,i)=>value!==points.at(-1)[i]))segments.push(...points.at(-1),0,...points[0],0);
-   return segments.length?[{name,program,positions:new Float32Array(segments)}]:[];
+   return segments.length?[{name,program,anchored,positions:new Float32Array(segments)}]:[];
   });
  }
  function saveMatrixSeed(){
   return grid.seed.meshes.filter(mesh=>e.pieces().includes(mesh)).map(mesh=>({
-   name:mesh.name,program:mesh.userData.program,color:mesh.material.color.getHex(),
+   name:mesh.name,program:mesh.userData.program,anchored:Boolean(mesh.userData.iterationAnchor),color:mesh.material.color.getHex(),
    positions:mesh.geometry.attributes.position.array.slice(),position:mesh.position.toArray(),
    rotation:mesh.quaternion.toArray(),scale:mesh.scale.toArray()
   }));
@@ -1112,14 +1179,14 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
    const existing=e.pieces().find(mesh=>mesh.studioId===state.grid.seed.meshIds[index]);
    if(existing&&matches(member.position,existing.position.toArray())&&matches(member.rotation,existing.quaternion.toArray())&&
     matches(member.scale,existing.scale.toArray())&&matches(member.positions,existing.geometry.attributes.position.array)&&
-    existing.name===member.name&&existing.userData.program===member.program&&existing.material.color.getHex()===member.color)return existing;
+    existing.name===member.name&&existing.userData.program===member.program&&Boolean(existing.userData.iterationAnchor)===Boolean(member.anchored)&&existing.material.color.getHex()===member.color)return existing;
    const geometry=new T.BufferGeometry();
    geometry.setAttribute('position',new T.BufferAttribute(member.positions.slice(),3));
    geometry.computeBoundingBox();
-   const mesh=e.add({geometry,name:member.name,curve:true,offset:new T.Vector3().fromArray(member.position),stage:'iterations'});
+   const mesh=e.add({geometry,name:member.name,curve:true,offset:new T.Vector3().fromArray(member.position),stage:workspaceStage});
    geometry.dispose();
    mesh.quaternion.fromArray(member.rotation);mesh.scale.fromArray(member.scale);mesh.material.color.setHex(member.color);
-   Object.assign(mesh.userData,{groupId:group,savedIterationId:record.id,matrixSeed:true,program:member.program});
+   Object.assign(mesh.userData,{groupId:group,savedIterationId:record.id,matrixSeed:true,program:member.program,iterationAnchor:Boolean(member.anchored)});
    return mesh;
   });
   for(const mesh of oldSeed){
@@ -1137,6 +1204,26 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  const byClass=selector=>savePanel.querySelector(selector);
  const matrixName=byClass('.matrix-name'),matrixLibrary=byClass('.matrix-library'),cellPicker=byClass('.matrix-cell');
  const matrixStatus=savePanel.querySelector('[role=status]');
+ const savedCellsPanel=document.createElement('section');savedCellsPanel.className='saved-matrix-cell-library';
+ savedCellsPanel.innerHTML='<h3>Insert saved matrix iteration</h3><label>Saved matrix iteration <select class="saved-matrix-cell-picker"></select></label><button class="saved-matrix-cell-insert" type="button">Insert saved iteration</button>';
+ byClass('.matrix-cell-save').after(savedCellsPanel);
+ const savedCellPicker=savedCellsPanel.querySelector('select');let savedCells=[];
+ async function refreshSavedCells(preferred=savedCellPicker.value){
+  savedCells=(await store.list()).filter(item=>item.kind==='matrix-cell').sort((a,b)=>(b.savedAt||0)-(a.savedAt||0));
+  savedCellPicker.replaceChildren(...savedCells.map(item=>new Option(item.name,item.id)));if(savedCells.some(item=>item.id===preferred))savedCellPicker.value=preferred;
+  if(!savedCells.length)savedCellPicker.add(new Option('No saved matrix iterations',''));
+ }
+ installSavedPicker(savedCellPicker,{insertButton:savedCellsPanel.querySelector('button'),status:matrixStatus,isBusy:e.isBusy,
+  onInsert:ids=>{
+   const before=new Set(e.pieces());isolated=null;selectedPiece=null;
+   for(const id of ids){const item=savedCells.find(item=>item.id===id);if(!item)continue;
+    insertSaved({...item,members:item.members.map(member=>({...member,position:member.position||[0,0,0],rotation:member.rotation||[0,0,0,1],scale:member.scale||[1,1,1],color:member.color??0x21e0ed}))},true);
+   }
+   const added=e.pieces().filter(mesh=>!before.has(mesh));e.select(added);e.mark(added);e.fit();visualKey='';matrixStatus.textContent='Inserted '+ids.length+' saved matrix iterations.';
+  },
+  onDelete:async ids=>{for(const id of ids)await store.remove(id);await refreshSavedCells();matrixStatus.textContent='Deleted '+ids.length+' saved matrix iterations.';}
+ });
+
  let matrices=[],savePanelOpen=false,savePanelKey='',fileBusy=false;
  async function refreshMatrices(preferred=matrixLibrary.value){
   matrices=(await store.list()).filter(item=>item.kind==='matrix').sort((a,b)=>b.savedAt-a.savedAt);
@@ -1183,7 +1270,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
      if(!row)return;const [x,y,degrees,scale=1]=row,angle=degrees*Math.PI/180,c=Math.cos(angle),sn=Math.sin(angle),positions=[];
      for(const path of part.paths){const points=path.points.map(([px,py])=>{const ox=(px-part.center.x)*scale,oy=(py-part.center.y)*scale;return [x+dx+c*ox-sn*oy,y+dy+sn*ox+c*oy,0];});for(let j=1;j<points.length;j++)positions.push(...points[j-1],...points[j]);}
      if(!positions.length)return;const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.Float32BufferAttribute(positions,3));geometry.computeBoundingBox();
-     const mesh=e.add({geometry,name:record.name+' · '+(part.program||'piece '+(i+1)),curve:true,offset:new T.Vector3(),stage:'iterations'});geometry.dispose();
+     const mesh=e.add({geometry,name:record.name+' · '+(part.program||'piece '+(i+1)),curve:true,offset:new T.Vector3(),stage:workspaceStage});geometry.dispose();
      Object.assign(mesh.userData,{groupId:group,savedIterationId:record.id,matrixBatch:true,program:part.program||''});
      if(first){mesh.userData.savedMatrixState=structuredClone(record.state);first=false;}added.push(mesh);
     });
@@ -1204,7 +1291,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   fileBusy=true;
   try{
    await store.add({id:crypto.randomUUID(),kind:'matrix-cell',name,members,savedAt:Date.now()});
-   input.value='';matrixStatus.textContent='Saved '+name+' to Floor plates.';
+   await refreshSavedCells();input.value='';matrixStatus.textContent='Saved '+name+' to Floor plates.';
   }catch(error){reportMatrix(error);}finally{fileBusy=false;}
  };
  for(const [selector,extension] of [['.matrix-ai','ai'],['.matrix-rhino','3dm']]){
@@ -1222,7 +1309,7 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
  }
  function updateSavePanel(){
   const open=!savePanel.hidden;
-  if(open&&!savePanelOpen)refreshMatrices().catch(reportMatrix);
+  if(open&&!savePanelOpen)Promise.all([refreshMatrices(),refreshSavedCells()]).catch(reportMatrix);
   savePanelOpen=open;
   if(!open)return;
   const ids=grid?[0,...grid.layouts.keys()]:[];
@@ -1238,10 +1325,12 @@ export function installIterationWorkspace(e,curves,mix,ranking,savePanel,store){
   for(const selector of ['.matrix-save','.matrix-ai','.matrix-rhino','.matrix-cell-save'])byClass(selector).disabled=fileBusy||!grid;
   matrixSelection.update();
  }
-   return {allowsMesh,inWorkspace,fitGrid,saveKey,saveState,restoreState,
+   return {insertIterations:ids=>insertIterations(ids,false),allowsMesh,inWorkspace,fitGrid,saveKey,saveState,restoreState,
   update(active,showMix){
    const curvesOpen=active&&!showMix;
+   positionInputSection(curvesOpen);
    if(curvesOpen&&!curvesWasOpen)refreshSaved();curvesWasOpen=curvesOpen;
+   refreshAnchorSpaces();
    refreshPrograms();
    continuityButton.disabled=!grid?.mixed||!programPairs().length||!validPairs();
    updateSavePanel();

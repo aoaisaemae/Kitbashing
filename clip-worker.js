@@ -41,3 +41,4 @@ self.onmessage=({data:{meshes,normal,offset}})=>{
   self.postMessage({results},results.flat().map(p=>p.buffer));
  }catch(error){self.postMessage({error:error.message});}
 };
+

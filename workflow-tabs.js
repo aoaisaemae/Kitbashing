@@ -1,17 +1,17 @@
 import * as T from './three.js';
 export function installWorkflow(e){
- const {$}=e,names=['figures','resolution','iterations','floor-plates','project'];let active='figures',worker=null,rejectJob=null,job=0,lastUI='',message='Arrange your source figures, then build a closed Project mesh.';
- const tabs=document.createElement('nav');tabs.className='viewport-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Modeling stages');for(const name of names){const b=document.createElement('button');b.id='viewport'+name[0].toUpperCase()+name.slice(1);b.textContent=name==='resolution'?'Program':name==='project'?'Project':name==='floor-plates'?'Floor plates':name==='iterations'?'Iterations':'Figures';b.dataset.stage=name;b.setAttribute('role','tab');b.onclick=()=>switchTo(name);tabs.append(b);}$('.canvas-head').before(tabs);
+ const {$}=e,names=['figures','resolution','iterations','spaces','floor-plates','project'];let active='figures',worker=null,rejectJob=null,job=0,lastUI='',message='Arrange your source figures, then build a closed Project mesh.';
+ const tabs=document.createElement('nav');tabs.className='viewport-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Modeling stages');for(const name of names){const b=document.createElement('button');b.id='viewport'+name[0].toUpperCase()+name.slice(1);b.textContent=name==='resolution'?'Program':name==='project'?'Project':name==='floor-plates'?'Floor plates':name==='iterations'?'Iterations':name==='spaces'?'Spaces':'Figures';b.dataset.stage=name;b.setAttribute('role','tab');b.onclick=()=>switchTo(name);tabs.append(b);}$('.canvas-head').before(tabs);
  const bar=document.createElement('section');bar.className='workflow-bar';bar.innerHTML='<div class="workflow-actions"><button id="buildProject">Build Project from Figures</button><button id="sendResolution">Edit resolution →</button><button id="cancelWorkflow" hidden>Cancel</button></div><p id="workflowStatus" role="status"></p>';
  $('.alignment-strip').after(bar);
- const stageOf=m=>m.userData.workspaceStage||'figures',inStage=(m,stage=active)=>!e.pieces().includes(m)||(stage==='resolution'?['figures','program-outline'].includes(stageOf(m)):stageOf(m)===stage),stagePieces=(stage=active)=>e.pieces().filter(m=>inStage(m,stage));
+ const stageOf=m=>m.userData.workspaceStage||'figures',inStage=(m,stage=active)=>!e.pieces().includes(m)||(stage==='resolution'?['figures','program-outline'].includes(stageOf(m)):stageOf(m)===(stage==='spaces'?(e.spacesStage?.()||'spaces'):stage)),stagePieces=(stage=active)=>e.pieces().filter(m=>inStage(m,stage));
  const count=m=>m.geometry.userData.quadLayout?m.geometry.attributes.position.count/6:(m.geometry.index?.count||m.geometry.attributes.position.count);
  const pack=g=>{const flat=g.index?g.toNonIndexed():g;const p=flat.attributes.position.array.slice();if(flat!==g)flat.dispose();return p;};
  function signature(){return JSON.stringify(stagePieces('figures').filter(e.layerVisible).map(m=>{const p=m.geometry.attributes.position;return [m.studioId,p.count,...Array.from({length:12},(_,i)=>p.array[Math.floor(i*(p.array.length-1)/11)]),...m.position.toArray(),...m.quaternion.toArray(),...m.scale.toArray()];}));}
  function geometry(positions,layout=false){const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(positions,3));if(layout)g.userData.quadLayout=layout;g.computeVertexNormals();g.computeBoundingBox();return g;}
  function say(text){message=text;$('#workflowStatus').textContent=text;}
  function restore(state){active=(names.includes(state?.active)||state?.active==='resolution')?state.active:'figures';lastUI='';update();}
- function refreshVisibility(){for(const m of e.pieces())m.visible=inStage(m)&&e.layerVisible(m)&&!e.split()?.isSuppressed(m);}
+ function refreshVisibility(){for(const m of e.pieces())m.visible=inStage(m)&&!m.userData.spaceFloorHidden&&e.layerVisible(m)&&!e.split()?.isSuppressed(m);}
  function selectContent(){e.select(stagePieces().filter(e.canEdit));}
  function update(){
   refreshVisibility();const current=stagePieces(),key=JSON.stringify([active,e.isBusy(),current.map(m=>[m.studioId,m.geometry.uuid,e.locked(m),e.layerVisible(m)])]);
@@ -20,7 +20,7 @@ export function installWorkflow(e){
   $('#buildProject').hidden=active==='resolution';$('#buildProject').textContent=active==='figures'?'Build Project from Figures':'Update Project from Figures';$('#sendResolution').hidden=true;
   for(const b of bar.querySelectorAll('button:not(#cancelWorkflow)'))b.disabled=e.isBusy();$('#cancelWorkflow').hidden=!worker;
   $('#workflowStatus').textContent=active==='resolution'?'':message;
-  bar.hidden=['resolution','iterations','floor-plates'].includes(active);
+  bar.hidden=['resolution','iterations','spaces','floor-plates'].includes(active);
  }
  async function switchTo(name){if(!names.includes(name)&&name!=='resolution')return;
   if(e.isBusy()||e.split()?.active)return e.say('Finish or cancel the current operation first.');if(name===active)return;

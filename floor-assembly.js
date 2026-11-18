@@ -1,11 +1,11 @@
-import {installSavedPicker} from './saved-picker.js';
+import {installSavedPicker} from './saved-picker.js?v=anchor-cyan-curve-groups';
 import {floorPlanPages,illustratorFloorPlans} from './floor-plan-export.js';
-import {floorRhinoFile} from './floor-rhino.js?v=saved-selection-and-project';
+import {floorRhinoFile} from './floor-rhino.js?v=anchor-cyan-curve-groups';
 import {quadMesh} from './quad-mesh.js';
-import {downloadMatrix} from './matrix-files.js?v=saved-selection-and-project';
-import {installFloorSpecs,planArea,planInterior,scaleFigure} from './floor-specs.js?v=saved-selection-and-project';
+import {downloadMatrix} from './matrix-files.js?v=anchor-cyan-curve-groups';
+import {installFloorSpecs,planArea,planInterior,scaleFigure} from './floor-specs.js?v=anchor-cyan-curve-groups';
 import {traceCombinedContour} from './combined-contour.js';
-import {splitCurvePaths} from './iteration-workspace.js?v=saved-selection-and-project';
+import {splitCurvePaths} from './iteration-workspace.js?v=anchor-cyan-curve-groups';
 import * as T from './three.js';
 
 const foot=304.8;
