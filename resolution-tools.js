@@ -1,9 +1,9 @@
-import {installSpacesWorkspace} from './spaces-workspace.js?v=floor-flow-20261118';
-import {installSavedPicker} from './saved-picker.js?v=floor-flow-20261118';
-import {installFloorAssembly} from './floor-assembly.js?v=floor-flow-20261118';
+import {installSpacesWorkspace} from './spaces-workspace.js?v=no-site-fill-20261118';
+import {installSavedPicker} from './saved-picker.js?v=no-site-fill-20261118';
+import {installFloorAssembly} from './floor-assembly.js?v=no-site-fill-20261118';
 import * as T from './three.js';
 import {installOutline} from './composition-outline.js';
-import {installIterationWorkspace} from './iteration-workspace.js?v=floor-flow-20261118';
+import {installIterationWorkspace} from './iteration-workspace.js?v=no-site-fill-20261118';
 
 export function installResolutionTools(e){
  const panel=document.createElement('aside'),constraints=document.createElement('aside');
