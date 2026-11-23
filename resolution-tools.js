@@ -1,9 +1,9 @@
-import {installSpacesWorkspace} from './spaces-workspace.js?v=no-site-fill-20261118';
-import {installSavedPicker} from './saved-picker.js?v=no-site-fill-20261118';
-import {installFloorAssembly} from './floor-assembly.js?v=no-site-fill-20261118';
+import {installSpacesWorkspace} from './spaces-workspace.js?v=site-sections-20261122';
+import {installSavedPicker} from './saved-picker.js?v=site-sections-20261122';
+import {installFloorAssembly} from './floor-assembly.js?v=site-sections-20261122';
 import * as T from './three.js';
 import {installOutline} from './composition-outline.js';
-import {installIterationWorkspace} from './iteration-workspace.js?v=no-site-fill-20261118';
+import {installIterationWorkspace} from './iteration-workspace.js?v=site-sections-20261122';
 
 export function installResolutionTools(e){
  const panel=document.createElement('aside'),constraints=document.createElement('aside');
@@ -63,7 +63,7 @@ export function installResolutionTools(e){
  const spacesTabs=['01 / ASSIGN','02 / ASSEMBLE','03 / FLOOR','04 / SITE'].map((label,i)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.hidden=true;b.onclick=()=>{e.select([]);spacesChosen=i;};e.$('.panel-tabs').append(b);return b;});
  const spacesLibrary=installIterations(e,document.createElement('div'),floors);
  const spaces=installSpacesWorkspace(e,spacesPanel,spacesPages,spacesLibrary,()=>spacesChosen,index=>{spacesChosen=index;e.select([]);});
- return {get spacesOperate(){return e.workflow().active==='spaces'&&spacesChosen>=2;},get site3D(){return e.workflow().active==='spaces'&&spaces.site3D();},exportRhino:floors.exportRhino,pick:(x,y)=>spaces.pick(x,y)||editor.pick(x,y)||floors.pick(x,y),allowsMesh:mesh=>spaces.allowsMesh(mesh)&&editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:mesh=>spaces.inWorkspace(mesh)&&editor.inWorkspace(mesh)&&floors.inWorkspace(mesh),fitGrid:()=>e.workflow().active==='spaces'?spaces.fitGrid():editor.fitGrid(),
+ return {get spacesOperate(){return e.workflow().active==='spaces'&&spacesChosen>=2&&!spaces.isSiteStudy();},get site3D(){return e.workflow().active==='spaces'&&spaces.site3D();},exportRhino:floors.exportRhino,pick:(x,y)=>spaces.pick(x,y)||editor.pick(x,y)||floors.pick(x,y),allowsMesh:mesh=>spaces.allowsMesh(mesh)&&editor.allowsMesh(mesh)&&floors.allowsMesh(mesh),inWorkspace:mesh=>spaces.inWorkspace(mesh)&&editor.inWorkspace(mesh)&&floors.inWorkspace(mesh),fitGrid:()=>e.workflow().active==='spaces'?spaces.fitGrid():editor.fitGrid(),
   saveKey:()=>[chosen,editor.saveKey(),floors.save(),spaces.saveKey()],
   saveState:()=>({chosen,editor:editor.saveState(),floors:floors.save(),spaces:spaces.saveState(),spacesChosen}),
   restoreState(state){

@@ -1,18 +1,19 @@
+import {renderSiteView} from './site-surfaces.js?v=site-sections-20261122';
 import {addProgramText} from './rhino-program-text.js';
-import {installFolderLibrary} from './folder-library.js?v=no-site-fill-20261118';
-import {installResolutionTools} from './resolution-tools.js?v=no-site-fill-20261118';
+import {installFolderLibrary} from './folder-library.js?v=site-sections-20261122';
+import {installResolutionTools} from './resolution-tools.js?v=site-sections-20261122';
 import {installProjectMass} from './project-mass.js';
 import {installViewportControls} from './viewport-controls.js';
-import {installWorkflow} from './workflow-tabs.js?v=no-site-fill-20261118';
+import {installWorkflow} from './workflow-tabs.js?v=site-sections-20261122';
 import {installSplit} from './split-tools.js';
 import {organizeProperties} from './properties.js';
 import {installLayers} from './layers.js';
 import {describeShape,matchReferences} from './shape-features.js';
-import {installReferenceLayout} from './reference-layout.js?v=no-site-fill-20261118';
-import {installCad} from './cad-tools.js?v=no-site-fill-20261118';
+import {installReferenceLayout} from './reference-layout.js?v=site-sections-20261122';
+import {installCad} from './cad-tools.js?v=site-sections-20261122';
 import {quadMesh} from './quad-mesh.js';
 import * as T from 'three';
-import {OrbitControls} from './OrbitControls.js?v=no-site-fill-20261118';
+import {OrbitControls} from './OrbitControls.js?v=site-sections-20261122';
 import {TransformControls} from './TransformControls.js';
 import {OBJLoader} from './OBJLoader.js';
 import {splitParts} from './geometry.js';
@@ -48,7 +49,7 @@ const grid=new T.GridHelper(600,60,0x33434b,0x1c252d);grid.position.y=-.15;scene
 const observer=new ResizeObserver(()=>{renderer.setSize(view.clientWidth,view.clientHeight);camera.aspect=view.clientWidth/view.clientHeight;camera.updateProjectionMatrix();});observer.observe(view);
 renderer.setAnimationLoop(()=>{orbit.update();layerTools?.update();splitTools?.update();workflowTools?.update();cadTools?.update();viewTools?.update();massTools?.update();resolutionTools?.update();selectionOutlines.forEach(({mesh,halo})=>{mesh.updateMatrixWorld(true);halo.geometry=mesh.geometry;halo.matrix.copy(mesh.matrixWorld);halo.matrixWorldNeedsUpdate=true;halo.visible=isVisible(mesh)&&resolutionTools?.allowsMesh(mesh)!==false;halo.material.clippingPlanes=mesh.material.clippingPlanes;});const hidden=pieces.filter(mesh=>mesh.visible&&resolutionTools?.allowsMesh(mesh)===false);
  for(const mesh of hidden)mesh.visible=false;
- try{layoutTools?.update();transform.camera=displayCamera();renderer.render(scene,transform.camera);}finally{for(const mesh of hidden)mesh.visible=true;}});
+ try{layoutTools?.update();transform.camera=displayCamera();renderSiteView(renderer,scene,transform.camera);}finally{for(const mesh of hidden)mesh.visible=true;}});
 function say(s){$('#toast').textContent=s;$('#toast').style.display='block';clearTimeout(say.timer);say.timer=setTimeout(()=>$('#toast').style.display='none',5500);$('#status').textContent=s;}
 function material(i){return new T.MeshStandardMaterial({color:colors[i%3],metalness:.28,roughness:.36,wireframe:false});}
 function updateInputs(){for(const el of document.querySelectorAll('[data-prop]')){const p=el.dataset.prop,a=el.dataset.axis;el.disabled=!selected||![...selection].every(canEdit);el.value=selected?(p==='rotation'?T.MathUtils.radToDeg(selected[p][a]):p==='position'?selected[p][a]/unitsPerFoot:selected[p][a]).toFixed(p==='position'?4:2):p==='scale'?'1.00':'0.00';}}
@@ -181,7 +182,7 @@ const snapshot=()=>({iterationState:resolutionTools?.saveState(),workflow:workfl
 function release(s){s.items.forEach(m=>m.geometry.dispose());}
 function checkpoint(){if(restoring||busy)return;past.push(snapshot());if(past.length>30)release(past.shift());future.splice(0).forEach(release);historyButtons();}
 function historyButtons(){$('#undo').disabled=!past.length||busy;$('#redo').disabled=!future.length||busy;}
-function restore(s){restoring=true;splitTools?.cancel();workflowTools?.restore(s.workflow);layerTools?.restore(s.layers);previousSelectionIds=s.previousSelectionIds||[];lastEditedIds=s.lastEditedIds||[];if(s.folders){folders.splice(0,folders.length,...s.folders.map(f=>({...f})));collections=s.collections||[];activeCollection=s.activeCollection||"";currentFolder=s.currentFolder??'*';}if(s.assets){assets.splice(0,assets.length,...s.assets);renderAssets();}select(null);pieces.splice(0).forEach(m=>{scene.remove(m);m.geometry.dispose();m.material.dispose();});s.items.forEach(item=>{const m=addPiece({geometry:item.geometry,name:item.name,curve:item.data?.outlineCurve});m.studioId=item.id||m.studioId;m.material.color.setHex(item.color);m.position.fromArray(item.position);m.rotation.fromArray(item.rotation);m.scale.fromArray(item.scale);m.userData={...item.data};});setSelection((s.selectedIndices||[s.selected]).map(i=>pieces[i]).filter(Boolean));cadTools?.restoreState(s.cad);resolutionTools?.restoreState(s.iterationState);layerTools?.update();cadTools?.wire(wire);restoring=false;release(s);historyButtons();}
+function restore(s){const migrateIterations=s.workflow?.active==='iterations'&&!s.items.some(item=>item.data?.workspaceStage==='spaces');restoring=true;splitTools?.cancel();workflowTools?.restore(s.workflow);layerTools?.restore(s.layers);previousSelectionIds=s.previousSelectionIds||[];lastEditedIds=s.lastEditedIds||[];if(s.folders){folders.splice(0,folders.length,...s.folders.map(f=>({...f})));collections=s.collections||[];activeCollection=s.activeCollection||"";currentFolder=s.currentFolder??'*';}if(s.assets){assets.splice(0,assets.length,...s.assets);renderAssets();}select(null);pieces.splice(0).forEach(m=>{scene.remove(m);m.geometry.dispose();m.material.dispose();});s.items.forEach(item=>{const m=addPiece({geometry:item.geometry,name:item.name,curve:item.data?.outlineCurve});m.studioId=item.id||m.studioId;m.material.color.setHex(item.color);m.position.fromArray(item.position);m.rotation.fromArray(item.rotation);m.scale.fromArray(item.scale);m.userData={...item.data};if(migrateIterations&&m.userData.workspaceStage==='iterations')m.userData.workspaceStage='spaces';});setSelection((s.selectedIndices||[s.selected]).map(i=>pieces[i]).filter(Boolean));cadTools?.restoreState(s.cad);resolutionTools?.restoreState(s.iterationState);layerTools?.update();cadTools?.wire(wire);restoring=false;release(s);historyButtons();}
 function undo(){if(busy||!past.length)return;future.push(snapshot());restore(past.pop());say('Undone');}
 function redo(){if(busy||!future.length)return;past.push(snapshot());restore(future.pop());say('Redone');}
 const historyUI=document.createElement('div');historyUI.className='canvas-actions';historyUI.innerHTML='<button id="undo" title="Undo · Ctrl/Cmd Z">↶ Undo</button><button id="redo" title="Redo · Ctrl/Cmd Shift Z">↷ Redo</button><button id="shortcuts" title="Keyboard shortcuts">?</button>';
@@ -357,7 +358,7 @@ for(const id of ['duplicate','reset','mirror','pasteObjects','repair','fuse','ar
 cadTools=installCad({commandSelection:()=>[...new Set([...selection,...lockedCommandTargets])],T,$,scene,camera,renderer,view,orbit,transform,pieces:()=>pieces,selection:()=>[...selection],select:setSelection,checkpoint,mark:markEdited,add:addPiece,clone:cloneAtCurrentTransform,say,canEdit,isVisible,blocked:()=>!!splitTools?.active||!!massTools?.picking,split:level=>splitTools?.start(level),flow:()=>massTools?.start(),programView,setModelMode,unitsPerFoot,commandBlocked:()=>!!splitTools?.active||!!massTools?.picking,isBusy:()=>busy,busy:value=>{busy=value;historyButtons();}});
 $('#wire').onclick=()=>{wire=!wire;cadTools.wire(wire);$('#wire').classList.toggle('active',wire);};$('#wire').title='Show quadrangular mesh edges';
 
-layoutTools=installReferenceLayout({site3D:()=>!!resolutionTools?.site3D,cameraMoving:()=>performance.now()-lastCameraMotion<160,$,program:programView,scene,camera,renderer,orbit,transform,grid,floor:floorView,fit,say,selection:()=>[...selection],pieces:()=>pieces.filter(isVisible),cad:()=>cadTools,boundsPieces:()=>pieces.filter(m=>inStage(m)&&(!layerTools||layerTools.isVisible(m))),blocked:()=>!!splitTools?.active,splitControl:()=>splitTools?.control,select:meshes=>{rememberSelection();setSelection(meshes);}});
+layoutTools=installReferenceLayout({zUp:()=>workflowTools?.active==='spaces',site3D:()=>!!resolutionTools?.site3D,cameraMoving:()=>performance.now()-lastCameraMotion<160,$,program:programView,scene,camera,renderer,orbit,transform,grid,floor:floorView,fit,say,selection:()=>[...selection],pieces:()=>pieces.filter(isVisible),cad:()=>cadTools,boundsPieces:()=>pieces.filter(m=>inStage(m)&&(!layerTools||layerTools.isVisible(m))),blocked:()=>!!splitTools?.active,splitControl:()=>splitTools?.control,select:meshes=>{rememberSelection();setSelection(meshes);}});
 
 function inStage(m){return !workflowTools||workflowTools.inStage(m);}
 function canEdit(m){return !!m&&resolutionTools?.inWorkspace(m)!==false&&inStage(m)&&(!layerTools||layerTools.canEdit(m));}

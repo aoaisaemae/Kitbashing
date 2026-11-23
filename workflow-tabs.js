@@ -1,6 +1,6 @@
 import * as T from './three.js';
 export function installWorkflow(e){
- const {$}=e,names=['figures','resolution','iterations','spaces','floor-plates','project'];let active='figures',worker=null,rejectJob=null,job=0,lastUI='',message='Arrange your source figures, then build a closed Project mesh.';
+ const {$}=e,names=['figures','resolution','spaces','project'];let active='figures',worker=null,rejectJob=null,job=0,lastUI='',message='Arrange your source figures, then build a closed Project mesh.';
  const tabs=document.createElement('nav');tabs.className='viewport-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Modeling stages');for(const name of names){const b=document.createElement('button');b.id='viewport'+name[0].toUpperCase()+name.slice(1);b.textContent=name==='resolution'?'Program':name==='project'?'Project':name==='floor-plates'?'Floor plates':name==='iterations'?'Iterations':name==='spaces'?'Spaces':'Figures';b.dataset.stage=name;b.setAttribute('role','tab');b.onclick=()=>switchTo(name);tabs.append(b);}$('.canvas-head').before(tabs);
  const bar=document.createElement('section');bar.className='workflow-bar';bar.innerHTML='<div class="workflow-actions"><button id="buildProject">Build Project from Figures</button><button id="sendResolution">Edit resolution →</button><button id="cancelWorkflow" hidden>Cancel</button></div><p id="workflowStatus" role="status"></p>';
  $('.alignment-strip').after(bar);
@@ -10,7 +10,7 @@ export function installWorkflow(e){
  function signature(){return JSON.stringify(stagePieces('figures').filter(e.layerVisible).map(m=>{const p=m.geometry.attributes.position;return [m.studioId,p.count,...Array.from({length:12},(_,i)=>p.array[Math.floor(i*(p.array.length-1)/11)]),...m.position.toArray(),...m.quaternion.toArray(),...m.scale.toArray()];}));}
  function geometry(positions,layout=false){const g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(positions,3));if(layout)g.userData.quadLayout=layout;g.computeVertexNormals();g.computeBoundingBox();return g;}
  function say(text){message=text;$('#workflowStatus').textContent=text;}
- function restore(state){active=(names.includes(state?.active)||state?.active==='resolution')?state.active:'figures';lastUI='';update();}
+ function restore(state){active=['floor-plates','iterations'].includes(state?.active)?'spaces':(names.includes(state?.active)||state?.active==='resolution')?state.active:'figures';lastUI='';update();}
  function refreshVisibility(){for(const m of e.pieces())m.visible=inStage(m)&&!m.userData.spaceFloorHidden&&e.layerVisible(m)&&!e.split()?.isSuppressed(m);}
  function selectContent(){e.select(stagePieces().filter(e.canEdit));}
  function update(){
